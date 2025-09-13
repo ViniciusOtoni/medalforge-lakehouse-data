@@ -19,7 +19,7 @@ concurrency:
 jobs:
   infra_bootstrap:
     # Chama o workflow do repositório de infra
-    uses: ViniciusOtoni/sunny-data/.github/workflows/infra-bootstrap.yml@main
+    uses: ViniciusOtoni/sunny-data/.github/workflows/infra-bootstrap.yaml@main
     secrets:
       # Passe, um a um, os secrets que o workflow de infra usa internamente.
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
