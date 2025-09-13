@@ -7,7 +7,7 @@ run_as:
   service_principal_name: ${var.dynamic_spn_client_id}
 
 targets:
-  bronze:                   
+  dev:                   
     default: true            
     workspace:
       # Autenticação Azure Databricks via SPN bootstrap + resource id da workspace
