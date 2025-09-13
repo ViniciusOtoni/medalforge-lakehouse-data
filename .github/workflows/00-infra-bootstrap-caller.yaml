@@ -1,0 +1,45 @@
+name: Infra – Bootstrap (caller)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/00-infra-bootstrap-caller.yml"
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+concurrency:
+  group: infra-bootstrap-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  infra_bootstrap:
+    # Chama o workflow do repositório de infra
+    uses: ViniciusOtoni/sunny-data/.github/workflows/infra-bootstrap.yml@main
+    secrets:
+      # Passe, um a um, os secrets que o workflow de infra usa internamente.
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+      ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_OBJECT_ID:       ${{ secrets.ARM_OBJECT_ID }}
+      AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}
+      ARM_ACCOUNT_ID:      ${{ secrets.ARM_ACCOUNT_ID }}
+
+  show_outputs:
+    name: Capture outputs (exemplo)
+    needs: infra_bootstrap
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print outputs
+        run: |
+          echo "Workspace URL: ${{ needs.infra_bootstrap.outputs.workspace_url }}"
+          echo "Workspace ID:  ${{ needs.infra_bootstrap.outputs.workspace_id }}"
+      
+      - name: Export env for next jobs
+        run: |
+          echo "WORKSPACE_URL=${{ needs.infra_bootstrap.outputs.workspace_url }}" >> $GITHUB_ENV
