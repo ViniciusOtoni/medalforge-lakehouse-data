@@ -7,7 +7,7 @@ on:
         description: "Caminho do arquivo no repo (ex.: data/input/orders.csv)"
         required: true
       blob_path:
-        description: "Nome do arquivo no RAW (ex.: orders.csv ou subpasta/arquivo.csv)"
+        description: "Caminho no RAW (ex.: orders.csv ou subpasta/arquivo.csv)"
         required: true
 
 permissions:
@@ -18,21 +18,55 @@ jobs:
   upload:
     runs-on: ubuntu-latest
     env:
-      STORAGE_ACCOUNT_NAME: medalforgestorage    
-      FILE_SYSTEM:          raw                                  
+      STORAGE_ACCOUNT_NAME: medalforgestorage   
+      FILE_SYSTEM:          raw                
+      KV_NAME:              akv-medalforge-rbac-core
     steps:
       - uses: actions/checkout@v4
 
+      # 1) Login com a SPN BOOTSTRAP
       - name: Azure login (SPN bootstrap)
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Upload file to ADLS Gen2
+      # 2) Buscar client_id / secret da SPN DINÂMICA no Key Vault
+      - name: Fetch dynamic-SPN creds from Key Vault
+        id: kv
         run: |
+          set -euo pipefail
+          SPN_ID=$(az keyvault secret show --vault-name "$KV_NAME" --name spn-client-id     --query value -o tsv)
+          SPN_SECRET=$(az keyvault secret show --vault-name "$KV_NAME" --name spn-client-secret --query value -o tsv)
+
+          echo "::add-mask::$SPN_SECRET"
+          echo "DYN_SPN_ID=$SPN_ID"       >> $GITHUB_ENV
+          echo "DYN_SPN_SECRET=$SPN_SECRET" >> $GITHUB_ENV
+
+      # 3) Trocar identidade: sair e logar como SPN DINÂMICA (RBAC: Storage Blob Data Contributor)
+      - name: Switch to dynamic SPN
+        run: |
+          set -euo pipefail
+          az logout || true
+          az login --service-principal \
+            -u "${{ env.DYN_SPN_ID }}" \
+            -p "${{ env.DYN_SPN_SECRET }}" \
+            --tenant "${{ secrets.ARM_TENANT_ID }}"
+          # garante a subscription correta
+          az account set --subscription "${{ secrets.ARM_SUBSCRIPTION_ID }}"
+          az account show -o table
+
+      # 4) Upload do arquivo para o RAW com a SPN DINÂMICA
+        # --overwrite true permite reprocessos
+      - name: Upload file to ADLS Gen2 (RAW)
+        run: |
+          set -euo pipefail
           az storage fs file upload \
             --auth-mode login \
             --account-name "${{ env.STORAGE_ACCOUNT_NAME }}" \
             --file-system "${{ env.FILE_SYSTEM }}" \
             --source "${{ github.workspace }}/${{ github.event.inputs.local_path }}" \
-            --path "${{ github.event.inputs.blob_path }}"
+            --path "${{ github.event.inputs.blob_path }}" \
+            --overwrite true
+
+      - name: Done
+        run: echo "Upload concluído em abfss://${{ env.FILE_SYSTEM }}@${{ env.STORAGE_ACCOUNT_NAME }}.dfs.core.windows.net/${{ github.event.inputs.blob_path }}"
