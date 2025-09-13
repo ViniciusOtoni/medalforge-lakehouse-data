@@ -1,0 +1,38 @@
+name: 10 - Upload arquivo para RAW
+
+on:
+  workflow_dispatch:
+    inputs:
+      local_path:
+        description: "Caminho do arquivo no repo (ex.: data/input/orders.csv)"
+        required: true
+      blob_path:
+        description: "Nome do arquivo no RAW (ex.: orders.csv ou subpasta/arquivo.csv)"
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    env:
+      STORAGE_ACCOUNT_NAME: medalforgestorage    
+      FILE_SYSTEM:          raw                                  
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (SPN bootstrap)
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Upload file to ADLS Gen2
+        run: |
+          az storage fs file upload \
+            --auth-mode login \
+            --account-name "${{ env.STORAGE_ACCOUNT_NAME }}" \
+            --file-system "${{ env.FILE_SYSTEM }}" \
+            --source "${{ github.workspace }}/${{ github.event.inputs.local_path }}" \
+            --path "${{ github.event.inputs.blob_path }}"

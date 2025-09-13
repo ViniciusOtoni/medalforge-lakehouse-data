@@ -1,0 +1,65 @@
+bundle:
+  name: one-data-bronze
+  databricks_cli_version: ">=0.220.0"
+
+# Identidade que EXECUTA as tasks (SPN dinâmica criada pela infra)
+run_as:
+  service_principal_name: ${var.dynamic_spn_client_id}
+
+targets:
+  bronze:                   
+    default: true            
+    workspace:
+      # Autenticação Azure Databricks via SPN bootstrap + resource id da workspace
+      azure_workspace_resource_id: ${var.azure_workspace_resource_id}
+      azure_client_id: ${var.azure_client_id}
+      azure_tenant_id: ${var.azure_tenant_id}
+
+    sync:
+      include:
+        - bronze/**
+        - contracts/**
+        - ingestors/**
+        - interfaces/**
+        - managers/**
+      exclude:
+        - .git/**
+        - .github/**
+
+    resources:
+      jobs:
+        ingest_bronze:
+          name: one-data-bronze-ingest
+
+          # permissões do JOB (quem pode gerenciar/ver/rodar)
+          permissions:
+            - level: CAN_MANAGE
+              service_principal_name: ${var.dynamic_spn_client_id}
+
+          tasks:
+            - task_key: ingest
+              spark_python_task:
+                python_file: ./bronze/main.py
+                parameters:
+                  - --mode
+                  - validate+plan+ingest
+                  - --contract_path
+                  - ./contracts/dummy.json
+              job_cluster_key: jc_small
+
+              #libs da task
+              libraries:
+                - pypi:
+                    package: "pydantic>=2,<3"
+
+          job_clusters:
+            - job_cluster_key: jc_small
+              new_cluster:
+                spark_version: ${var.cluster_spark_version}
+                node_type_id: ${var.node_type_id}
+                num_workers: 1
+                data_security_mode: SINGLE_USER      
+                custom_tags:
+                  project: one-data
+                  layer: bronze
+                  purpose: ingest
