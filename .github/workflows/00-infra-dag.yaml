@@ -1,0 +1,42 @@
+name: Infra – DAG (core-identity -> landing-zone)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/00-infra-dag.yml"
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write  # necessário porque os reusables usam upload/download de artifact
+
+jobs:
+  core_identity:
+    uses: ViniciusOtoni/sunny-data/.github/workflows/core-identity.yaml@main
+    permissions:
+      contents: read
+      id-token: write
+      actions: write
+    secrets:
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+      ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_OBJECT_ID:       ${{ secrets.ARM_OBJECT_ID }}
+      AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}
+
+  landing_zone:
+    needs: core_identity
+    uses: ViniciusOtoni/sunny-data/.github/workflows/landing-zone.yaml@main
+    permissions:
+      contents: read
+      id-token: write
+      actions: write
+    secrets:
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+      ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+      AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}

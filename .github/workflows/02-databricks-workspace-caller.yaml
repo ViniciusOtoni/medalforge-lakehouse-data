@@ -1,0 +1,24 @@
+name: Infra – Databricks Workspace (caller)
+
+on:
+  workflow_run:
+    workflows: ["Infra – Storage Foundation (caller)"]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  databricks_workspace:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    uses: ViniciusOtoni/sunny-data/.github/workflows/databricks-workspace.yaml@main
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    secrets:
+      AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
