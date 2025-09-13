@@ -20,6 +20,10 @@ jobs:
   infra_bootstrap:
     # Chama o workflow do repositório de infra
     uses: ViniciusOtoni/sunny-data/.github/workflows/infra-bootstrap.yaml@main
+    permissions:            
+      contents: read
+      id-token: write
+      actions: write
     secrets:
       # Passe, um a um, os secrets que o workflow de infra usa internamente.
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
@@ -31,7 +35,7 @@ jobs:
       ARM_ACCOUNT_ID:      ${{ secrets.ARM_ACCOUNT_ID }}
 
   show_outputs:
-    name: Capture outputs (exemplo)
+    name: Capture outputs
     needs: infra_bootstrap
     runs-on: ubuntu-latest
     steps:
