@@ -27,25 +27,29 @@ jobs:
 
     env:
       KV_NAME: akv-medalforge-rbac-core
-      # Cluster params (inputs -> vars do bundle)
-      BUNDLE_VAR_cluster_spark_version: ${{ github.event.inputs.cluster_spark_version || '14.3.x-scala2.12' }}
-      BUNDLE_VAR_node_type_id:          ${{ github.event.inputs.node_type_id || 'Standard_F4' }}
+
+      # Vars do bundle (todas as ${var.*} do databricks.yaml)
+      DATABRICKS_BUNDLE_VAR_cluster_spark_version: ${{ github.event.inputs.cluster_spark_version || '14.3.x-scala2.12' }}
+      DATABRICKS_BUNDLE_VAR_node_type_id:          ${{ github.event.inputs.node_type_id || 'Standard_F4' }}
 
     steps:
       - uses: actions/checkout@v4
 
-      # 0) Login como SPN bootstrap (OIDC) - só para acessar o KV
+      # 0) Login como SPN bootstrap (OIDC) – para acessar o Key Vault
       - name: Azure login (SPN bootstrap)
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      
+
+      # Export para a unifed auth do Databricks (usa OIDC do GitHub)
       - name: Export env for Databricks auth
         run: |
           echo "ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }}" >> $GITHUB_ENV
           echo "ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
+          # (Opcional) força uso de OIDC
+          echo "ARM_USE_OIDC=true" >> $GITHUB_ENV
 
-      # 1) Buscar client_id/secret da SPN dinâmica no Key Vault
+      # 1) Buscar client_id/secret da SPN dinâmica no Key Vault (para ler o tfstate)
       - name: Fetch dynamic SPN creds from KV
         id: kv_dyn
         run: |
@@ -56,26 +60,28 @@ jobs:
 
           echo "::add-mask::$SPN_SECRET"
 
-          echo "DYN_SPN_ID=$SPN_ID"       >> $GITHUB_ENV
+          echo "DYN_SPN_ID=$SPN_ID"         >> $GITHUB_ENV
           echo "DYN_SPN_SECRET=$SPN_SECRET" >> $GITHUB_ENV
-          echo "DYN_TENANT_ID=$TENANT_ID" >> $GITHUB_ENV
-          echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
+          echo "DYN_TENANT_ID=$TENANT_ID"   >> $GITHUB_ENV
 
-      # 2) Usar SPN dinâmica para ler o tfstate e extrair workspace_id
+          # ${var.dynamic_spn_client_id} do bundle (run_as)
+          echo "DATABRICKS_BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
+
+      # 2) Usar SPN dinâmica para ler o tfstate e extrair workspace_id -> var do bundle
       - name: Read workspace_id from remote tfstate (dynamic SPN)
         env:
-          SA_NAME: stmedalforgestate      
+          SA_NAME: stmedalforgestate
           CONTAINER: tfstate
           STATE_BLOB: dbx.tfstate
         run: |
           set -euo pipefail
           sudo apt-get update -y && sudo apt-get install -y jq
 
-          # login com SPN dinâmica
+          # login com SPN dinâmica (tem RBAC no Storage)
           az login --service-principal \
             -u "$DYN_SPN_ID" \
             -p "$DYN_SPN_SECRET" \
-            --tenant "$DYN_TENANT_ID"
+            --tenant "$DYN_TENANT_ID" >/dev/null
 
           # baixa o tfstate
           az storage blob download \
@@ -83,7 +89,7 @@ jobs:
             --account-name "$SA_NAME" \
             --container-name "$CONTAINER" \
             --name "$STATE_BLOB" \
-            --file state.json
+            --file state.json >/dev/null
 
           WORKSPACE_ID=$(jq -r '.outputs.workspace_id.value' state.json)
           if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
@@ -92,7 +98,8 @@ jobs:
             exit 1
           fi
 
-          echo "BUNDLE_VAR_azure_workspace_resource_id=$WORKSPACE_ID" >> $GITHUB_ENV
+          # ${var.azure_workspace_resource_id} do bundle
+          echo "DATABRICKS_BUNDLE_VAR_azure_workspace_resource_id=$WORKSPACE_ID" >> $GITHUB_ENV
           echo "Resolved workspace_id (dynamic SPN): $WORKSPACE_ID"
 
       # 3) Instalar Databricks CLI (bundles) e fazer deploy/run
