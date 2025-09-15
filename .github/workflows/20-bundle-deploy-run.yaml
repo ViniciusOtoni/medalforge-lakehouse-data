@@ -45,40 +45,36 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # 1) SPN dinâmica (client_id) a partir do Key Vault
+      # 1) SPN dinâmica (client_id) a partir do Key Vault -> run_as do job no bundle
       - name: Fetch dynamic SPN (client_id) from KV
         run: |
           set -euo pipefail
           SPN_ID=$(az keyvault secret show --vault-name "$KV_NAME" --name spn-client-id --query value -o tsv)
           echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
 
-      # 2) Ler workspace_id do Terraform state do repositório de INFRA
-      - name: Checkout INFRA repo (read TF outputs)
-        uses: actions/checkout@v4
-        with:
-          repository: ViniciusOtoni/sunny-data
-          ref: main
-          path: medalforge-infra
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
-
-      - name: Read workspace_id from Terraform remote state
-        working-directory: medalforge-infra/databricks-workspace
+      # 2) Ler workspace_id direto do tfstate remoto e exportar para o DAB
+      - name: Read workspace_id from remote tfstate
         env:
-          # OIDC p/ backend "azurerm" (use_azuread_auth = true) e provider
-          ARM_USE_OIDC:        true
-          ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
-          ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          SA_NAME: stmedalforgestate      
+          CONTAINER: tfstate
+          STATE_BLOB: dbx.tfstate         
         run: |
           set -euo pipefail
-          terraform init -reconfigure
-          RID=$(terraform output -raw workspace_id)   # já é o ARM resourceId
-          echo "BUNDLE_VAR_azure_workspace_resource_id=$RID" >> $GITHUB_ENV
-          echo "Workspace Resource ID: $RID"
+          sudo apt-get update -y && sudo apt-get install -y jq
+          az storage blob download \
+            --auth-mode login \
+            --account-name "$SA_NAME" \
+            --container-name "$CONTAINER" \
+            --name "$STATE_BLOB" \
+            --file state.json
+          WORKSPACE_ID=$(jq -r '.outputs.workspace_id.value' state.json)
+          if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
+            echo "workspace_id não encontrado no tfstate ($CONTAINER/$STATE_BLOB)"
+            cat state.json || true
+            exit 1
+          fi
+          echo "BUNDLE_VAR_azure_workspace_resource_id=$WORKSPACE_ID" >> $GITHUB_ENV
+          echo "Resolved workspace_id: $WORKSPACE_ID"
 
       # 3) Instalar Databricks CLI (bundles) e fazer deploy/run
       - name: Install Databricks CLI (bundles)
