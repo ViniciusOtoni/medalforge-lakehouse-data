@@ -22,13 +22,7 @@ targets:
     sync:
       include:
         - bronze/**
-        - contracts/**
-        - ingestors/**
-        - interfaces/**
-        - managers/**
-      exclude:
-        - .git/**
-        - .github/**
+      
 
     resources:
       jobs:
@@ -45,7 +39,7 @@ targets:
                   - --mode
                   - validate+plan+ingest
                   - --contract_path
-                  - ./contracts/dummy.json
+                  - ./bronze/contracts/dummy.json
               job_cluster_key: jc_small
               libraries:
                 - pypi:
