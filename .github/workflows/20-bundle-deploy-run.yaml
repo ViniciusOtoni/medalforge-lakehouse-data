@@ -8,11 +8,12 @@ on:
         required: false
         default: "14.3.x-scala2.12"
       node_type_id:
-        description: "SKU (ex.: Standard_D4a_v4)"
+        description: "SKU (ex.: Standard_F4)"
         required: false
         default: "Standard_F4"
   workflow_run:
-    workflows: ["10 - Upload arquivo para RAW"]
+    workflows:
+      - "10 - Upload arquivo para RAW"
     types: [completed]
 
 permissions:
@@ -20,59 +21,71 @@ permissions:
   id-token: write
 
 jobs:
-  # 0) Obter o workspace_id chamando o workflow reusável de infra (idempotente)
-  ws:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    uses: ViniciusOtoni/sunny-data/.github/workflows/databricks-workspace.yaml@main
-    secrets:
-      AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
-
-  # 1) Deploy & Run do Bundle usando o workspace_id retornado
   deploy_and_run:
-    needs: ws
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     env:
       KV_NAME: akv-medalforge-rbac-core
 
-      # -> variáveis do bundle (consumidas pelo databricks.yaml via ${var.*})
-      BUNDLE_VAR_azure_workspace_resource_id: ${{ needs.ws.outputs.workspace_id }}
-
-      # Autenticação "bootstrap" (GitHub OIDC / client secret)
-      BUNDLE_VAR_azure_client_id:  ${{ secrets.ARM_CLIENT_ID }}
+      # Vars que alimentam o databricks.yml (prefixo BUNDLE_VAR_)
+      BUNDLE_VAR_azure_client_id:  ${{ secrets.ARM_CLIENT_ID }}    # SPN bootstrap
       BUNDLE_VAR_azure_tenant_id:  ${{ secrets.ARM_TENANT_ID }}
 
-      # Parâmetros de cluster (inputs -> vars do bundle)
+      # Cluster params (inputs -> vars do bundle)
       BUNDLE_VAR_cluster_spark_version: ${{ github.event.inputs.cluster_spark_version || '14.3.x-scala2.12' }}
       BUNDLE_VAR_node_type_id:          ${{ github.event.inputs.node_type_id || 'Standard_F4' }}
 
     steps:
       - uses: actions/checkout@v4
 
-      # Login na Azure (necessário para az + identidade que o bundles usa)
+      # 0) Login como SPN bootstrap (OIDC)
       - name: Azure login (SPN bootstrap)
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Pegar o client_id da SPN DINÂMICA no Key Vault para o run_as do bundle
+      # 1) SPN dinâmica (client_id) a partir do Key Vault
       - name: Fetch dynamic SPN (client_id) from KV
-        id: kv
         run: |
           set -euo pipefail
           SPN_ID=$(az keyvault secret show --vault-name "$KV_NAME" --name spn-client-id --query value -o tsv)
           echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
-          echo "dynamic_spn_client_id=$SPN_ID"
 
-      # Instalar o Databricks CLI (suporta Bundles)
+      # 2) Ler workspace_id do Terraform state do repositório de INFRA
+      - name: Checkout INFRA repo (read TF outputs)
+        uses: actions/checkout@v4
+        with:
+          repository: ViniciusOtoni/sunny-data
+          ref: main
+          path: medalforge-infra
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Read workspace_id from Terraform remote state
+        working-directory: medalforge-infra/databricks-workspace
+        env:
+          # OIDC p/ backend "azurerm" (use_azuread_auth = true) e provider
+          ARM_USE_OIDC:        true
+          ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+          ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          terraform init -reconfigure
+          RID=$(terraform output -raw workspace_id)   # já é o ARM resourceId
+          echo "BUNDLE_VAR_azure_workspace_resource_id=$RID" >> $GITHUB_ENV
+          echo "Workspace Resource ID: $RID"
+
+      # 3) Instalar Databricks CLI (bundles) e fazer deploy/run
       - name: Install Databricks CLI (bundles)
         run: |
           curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
           databricks -v
 
-      # Validar, deployar e rodar o job do bundle
       - name: DAB validate
         run: databricks bundle validate -t dev
 
