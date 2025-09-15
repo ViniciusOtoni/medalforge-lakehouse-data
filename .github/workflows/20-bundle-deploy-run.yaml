@@ -39,42 +39,61 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 0) Login como SPN bootstrap (OIDC)
+      # 0) Login como SPN bootstrap (OIDC) - só para acessar o KV
       - name: Azure login (SPN bootstrap)
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # 1) SPN dinâmica (client_id) a partir do Key Vault -> run_as do job no bundle
-      - name: Fetch dynamic SPN (client_id) from KV
+      # 1) Buscar client_id/secret da SPN dinâmica no Key Vault
+      - name: Fetch dynamic SPN creds from KV
+        id: kv_dyn
         run: |
           set -euo pipefail
           SPN_ID=$(az keyvault secret show --vault-name "$KV_NAME" --name spn-client-id --query value -o tsv)
+          SPN_SECRET=$(az keyvault secret show --vault-name "$KV_NAME" --name spn-client-secret --query value -o tsv)
+          TENANT_ID=${{ secrets.ARM_TENANT_ID }}
+
+          echo "::add-mask::$SPN_SECRET"
+
+          echo "DYN_SPN_ID=$SPN_ID"       >> $GITHUB_ENV
+          echo "DYN_SPN_SECRET=$SPN_SECRET" >> $GITHUB_ENV
+          echo "DYN_TENANT_ID=$TENANT_ID" >> $GITHUB_ENV
           echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
 
-      # 2) Ler workspace_id direto do tfstate remoto e exportar para o DAB
-      - name: Read workspace_id from remote tfstate
+      # 2) Usar SPN dinâmica para ler o tfstate e extrair workspace_id
+      - name: Read workspace_id from remote tfstate (dynamic SPN)
         env:
           SA_NAME: stmedalforgestate      
           CONTAINER: tfstate
-          STATE_BLOB: dbx.tfstate         
+          STATE_BLOB: dbx.tfstate
         run: |
           set -euo pipefail
           sudo apt-get update -y && sudo apt-get install -y jq
+
+          # login com SPN dinâmica
+          az login --service-principal \
+            -u "$DYN_SPN_ID" \
+            -p "$DYN_SPN_SECRET" \
+            --tenant "$DYN_TENANT_ID"
+
+          # baixa o tfstate
           az storage blob download \
             --auth-mode login \
             --account-name "$SA_NAME" \
             --container-name "$CONTAINER" \
             --name "$STATE_BLOB" \
             --file state.json
+
           WORKSPACE_ID=$(jq -r '.outputs.workspace_id.value' state.json)
           if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
             echo "workspace_id não encontrado no tfstate ($CONTAINER/$STATE_BLOB)"
             cat state.json || true
             exit 1
           fi
+
           echo "BUNDLE_VAR_azure_workspace_resource_id=$WORKSPACE_ID" >> $GITHUB_ENV
-          echo "Resolved workspace_id: $WORKSPACE_ID"
+          echo "Resolved workspace_id (dynamic SPN): $WORKSPACE_ID"
 
       # 3) Instalar Databricks CLI (bundles) e fazer deploy/run
       - name: Install Databricks CLI (bundles)
