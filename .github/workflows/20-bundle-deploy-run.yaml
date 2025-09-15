@@ -109,10 +109,10 @@ jobs:
         run: databricks auth env || true
 
       - name: DAB validate
-        run: databricks bundle validate -t dev --var "dynamic_spn_client_id=${{ env.DYN_SPN_ID }}
+        run: databricks bundle validate -t dev 
 
       - name: DAB deploy
-        run: databricks bundle deploy -t dev --var "dynamic_spn_client_id=${{ env.DYN_SPN_ID }}
+        run: databricks bundle deploy -t dev 
 
       - name: DAB run job
-        run: databricks bundle run -t dev ingest_bronze --no-ui --var "dynamic_spn_client_id=${{ env.DYN_SPN_ID }}
+        run: databricks bundle run -t dev ingest_bronze --no-ui 
