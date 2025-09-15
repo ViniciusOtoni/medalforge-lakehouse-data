@@ -28,8 +28,8 @@ jobs:
     env:
       KV_NAME: akv-medalforge-rbac-core
       # Vars do bundle (as ${var.*} do YAML)
-      DATABRICKS_BUNDLE_VAR_cluster_spark_version: ${{ github.event.inputs.cluster_spark_version || '14.3.x-scala2.12' }}
-      DATABRICKS_BUNDLE_VAR_node_type_id:          ${{ github.event.inputs.node_type_id || 'Standard_F4' }}
+      BUNDLE_VAR_cluster_spark_version: ${{ github.event.inputs.cluster_spark_version || '14.3.x-scala2.12' }}
+      BUNDLE_VAR_node_type_id:          ${{ github.event.inputs.node_type_id || 'Standard_F4' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +61,8 @@ jobs:
           echo "DYN_SPN_SECRET=$SPN_SECRET" >> $GITHUB_ENV
           echo "DYN_TENANT_ID=$TENANT_ID"   >> $GITHUB_ENV
           # run_as do job no bundle:
-          echo "DATABRICKS_BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
+          echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
+
 
       # 2) Loga como SPN dinâmica e lê workspace_id do tfstate -> DATABRICKS_AZURE_RESOURCE_ID
       - name: Read workspace_id from remote tfstate (dynamic SPN)
@@ -108,10 +109,10 @@ jobs:
         run: databricks auth env || true
 
       - name: DAB validate
-        run: databricks bundle validate -t dev
+        run: databricks bundle validate -t dev --var "dynamic_spn_client_id=${{ env.DYN_SPN_ID }}
 
       - name: DAB deploy
-        run: databricks bundle deploy -t dev
+        run: databricks bundle deploy -t dev --var "dynamic_spn_client_id=${{ env.DYN_SPN_ID }}
 
       - name: DAB run job
-        run: databricks bundle run -t dev ingest_bronze --no-ui
+        run: databricks bundle run -t dev ingest_bronze --no-ui --var "dynamic_spn_client_id=${{ env.DYN_SPN_ID }}
