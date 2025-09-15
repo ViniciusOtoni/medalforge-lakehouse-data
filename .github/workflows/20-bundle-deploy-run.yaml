@@ -8,7 +8,7 @@ on:
         required: false
         default: "14.3.x-scala2.12"
       node_type_id:
-        description: "SKU (ex.: Standard_DS3_v2)"
+        description: "SKU (ex.: Standard_D4a_v4)"
         required: false
         default: "Standard_F4"
   workflow_run:
@@ -20,39 +20,59 @@ permissions:
   id-token: write
 
 jobs:
-  deploy_and_run:
+  # 0) Obter o workspace_id chamando o workflow reusável de infra (idempotente)
+  ws:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    env:
-      # ---- Preencha estas variáveis / secrets no repositório de DADOS ----
-      # Recomendado: adicionar output na infra com o resource_id da workspace.
-      BUNDLE_VAR_azure_workspace_resource_id: ${{ secrets.AZURE_DATABRICKS_WORKSPACE_RESOURCE_ID }}
+    uses: ViniciusOtoni/sunny-data/.github/workflows/databricks-workspace.yaml@main
+    secrets:
+      AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
 
-      # Autenticação SPN bootstrap (mesma usada no azure/login)
+  # 1) Deploy & Run do Bundle usando o workspace_id retornado
+  deploy_and_run:
+    needs: ws
+    runs-on: ubuntu-latest
+
+    env:
+      KV_NAME: akv-medalforge-rbac-core
+
+      # -> variáveis do bundle (consumidas pelo databricks.yaml via ${var.*})
+      BUNDLE_VAR_azure_workspace_resource_id: ${{ needs.ws.outputs.workspace_id }}
+
+      # Autenticação "bootstrap" (GitHub OIDC / client secret)
       BUNDLE_VAR_azure_client_id:  ${{ secrets.ARM_CLIENT_ID }}
       BUNDLE_VAR_azure_tenant_id:  ${{ secrets.ARM_TENANT_ID }}
 
-      # SPN dinâmica (client_id) recuperada do Key Vault pela infra;
-      # se preferir, busque no KV também aqui (como no infra). Para simplificar, coloque como secret.
-      BUNDLE_VAR_dynamic_spn_client_id: ${{ secrets.DYNAMIC_SPN_CLIENT_ID }}
-
-      # Cluster params (podem vir dos inputs)
+      # Parâmetros de cluster (inputs -> vars do bundle)
       BUNDLE_VAR_cluster_spark_version: ${{ github.event.inputs.cluster_spark_version || '14.3.x-scala2.12' }}
-      BUNDLE_VAR_node_type_id:          ${{ github.event.inputs.node_type_id || 'Standard_DS3_v2' }}
+      BUNDLE_VAR_node_type_id:          ${{ github.event.inputs.node_type_id || 'Standard_F4' }}
+
     steps:
       - uses: actions/checkout@v4
 
+      # Login na Azure (necessário para az + identidade que o bundles usa)
       - name: Azure login (SPN bootstrap)
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # Pegar o client_id da SPN DINÂMICA no Key Vault para o run_as do bundle
+      - name: Fetch dynamic SPN (client_id) from KV
+        id: kv
+        run: |
+          set -euo pipefail
+          SPN_ID=$(az keyvault secret show --vault-name "$KV_NAME" --name spn-client-id --query value -o tsv)
+          echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
+          echo "dynamic_spn_client_id=$SPN_ID"
+
+      # Instalar o Databricks CLI (suporta Bundles)
       - name: Install Databricks CLI (bundles)
         run: |
           curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
           databricks -v
 
-      # Opcional: validar sintaxe/config antes do deploy
+      # Validar, deployar e rodar o job do bundle
       - name: DAB validate
         run: databricks bundle validate -t dev
 
