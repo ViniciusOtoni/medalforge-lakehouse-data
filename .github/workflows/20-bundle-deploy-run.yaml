@@ -27,11 +27,6 @@ jobs:
 
     env:
       KV_NAME: akv-medalforge-rbac-core
-
-      # Vars que alimentam o databricks.yml (prefixo BUNDLE_VAR_)
-      BUNDLE_VAR_azure_client_id:  ${{ secrets.ARM_CLIENT_ID }}    # SPN bootstrap
-      BUNDLE_VAR_azure_tenant_id:  ${{ secrets.ARM_TENANT_ID }}
-
       # Cluster params (inputs -> vars do bundle)
       BUNDLE_VAR_cluster_spark_version: ${{ github.event.inputs.cluster_spark_version || '14.3.x-scala2.12' }}
       BUNDLE_VAR_node_type_id:          ${{ github.event.inputs.node_type_id || 'Standard_F4' }}
@@ -44,6 +39,11 @@ jobs:
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Export env for Databricks auth
+        run: |
+          echo "ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
 
       # 1) Buscar client_id/secret da SPN dinâmica no Key Vault
       - name: Fetch dynamic SPN creds from KV
