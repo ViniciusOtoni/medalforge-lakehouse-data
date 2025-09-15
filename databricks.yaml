@@ -22,7 +22,11 @@ targets:
     sync:
       include:
         - bronze/**
-      
+      exclude:
+        - .git/**
+        - .github/**
+        - .assets/
+        - .data/
 
     resources:
       jobs:
