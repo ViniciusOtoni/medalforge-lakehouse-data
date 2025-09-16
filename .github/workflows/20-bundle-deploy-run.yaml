@@ -115,4 +115,4 @@ jobs:
         run: databricks bundle deploy -t dev 
 
       - name: DAB run job (aguardando conclusão)
-        run: databricks bundle run -t dev ingest_bronze
+        run: databricks bundle run -t dev one_data_proccess
