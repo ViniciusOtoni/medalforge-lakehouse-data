@@ -22,6 +22,10 @@ targets:
     sync:
       include:
         - bronze/**
+        - silver/**
+        - monitoring/**
+        - tests/**
+
       exclude:
         - .git/**
         - .github/**
@@ -30,13 +34,13 @@ targets:
 
     resources:
       jobs:
-        ingest_bronze:
-          name: one-data-bronze-ingest
+        one_data_proccess:
+          name: one_data_proccess
           permissions:
             - level: CAN_MANAGE
               service_principal_name: ${var.dynamic_spn_client_id}
           tasks:
-            - task_key: ingest
+            - task_key: bronze_ingest
               spark_python_task:
                 python_file: ./bronze/main.py
                 parameters:
@@ -44,17 +48,32 @@ targets:
                   - validate+plan+ingest
                   - --contract_path
                   - ./contracts/dummy.json
-              job_cluster_key: jc_small
+              job_cluster_key: small_job_cluster
               libraries:
                 - pypi:
                     package: "pydantic>=2,<3"
 
+            - task_key: silver_transform
+              depends_on:
+                - task_key: bronze_ingest
+              spark_python_task:
+                python_file: ./silver/main.py
+                parameters:
+                  - --contract_path
+                  - ./contracts/silver/vendas_v1.json
+              job_cluster_key: small_job_cluster
+              libraries:
+                - pypi: { package: "pydantic>=2,<3" }
+                - pypi: { package: "databricks-labs-dqx==0.8.0" } 
+
           job_clusters:
-            - job_cluster_key: jc_small
+            - job_cluster_key: small_job_cluster
               new_cluster:
                 spark_version: ${var.cluster_spark_version}
                 node_type_id: ${var.node_type_id}
-                num_workers: 1
+                autoscale:
+                  min_workers: 1
+                  max_workers: 2
                 data_security_mode: SINGLE_USER
                 custom_tags:
                   project: one-data
