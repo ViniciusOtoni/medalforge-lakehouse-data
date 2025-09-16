@@ -60,7 +60,7 @@ targets:
                 python_file: ./silver/main.py
                 parameters:
                   - --contract_path
-                  - ./contracts/silver/dummy.YAML
+                  - ./contracts/silver/dummy.yaml
               job_cluster_key: small_job_cluster
               libraries:
                 - pypi: { package: "pydantic>=2,<3" }
