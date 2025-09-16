@@ -7,11 +7,11 @@ import sys
 
 sys.path.append(os.getcwd())
 
-from silver.framework.contract_model import SilverYaml
-from silver.framework import etl_core
-from silver.framework.customs_engine import apply_customs_stage
-from silver.dqx.driver import apply_checks_split
-from silver.utils.merge import merge_upsert
+from framework.contract_model import SilverYaml
+from framework import etl_core
+from framework.customs_engine import apply_customs_stage
+from dqx.driver import apply_checks_split
+from utils.merge import merge_upsert
 
 spark = SparkSession.builder.getOrCreate()
 

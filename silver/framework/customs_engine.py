@@ -2,7 +2,7 @@ import importlib
 import inspect
 from typing import Dict, Any
 from pyspark.sql import DataFrame
-from .contract_model import CustomsCfg, CustomDecl, Step
+from framework.contract_model import CustomsCfg, CustomDecl, Step
 
 def _load_custom(module: str, method: str):
     mod = importlib.import_module(module)
