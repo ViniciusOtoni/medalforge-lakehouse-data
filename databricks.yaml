@@ -43,7 +43,7 @@ targets:
                   - --mode
                   - validate+plan+ingest
                   - --contract_path
-                  - ./bronze/contracts/dummy.json
+                  - ./contracts/dummy.json
               job_cluster_key: jc_small
               libraries:
                 - pypi:
