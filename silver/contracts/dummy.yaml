@@ -1,95 +1,114 @@
 version: "1.0"
 
 source:
-  bronze_table: "bronze.sales_new.sales_bronze_teste"   # source de dados...
+  bronze_table: "bronze.sales_new.sales_bronze_teste"
 
 target:
   catalog: "silver"
   schema:  "sales"
   table:   "sales_clean"
   write:
-    mode: "merge" 
-    merge_keys: ["id"] 
-    partition_by: ["ano","mes"] # colunas de particionamento
-    zorder_by: ["created_at"] # Z-Order para filtro
+    mode: "merge"
+    merge_keys: ["id"]
+    partition_by: ["ano","mes"]
+    zorder_by: ["created_at"]
 
 dqx:
-  criticality_default: "error"     # default para as regras
+  criticality_default: "error"
   checks:
     - name: not_null_id
-      function: is_not_null
-      arguments: { col_name: "id" }
       criticality: error
+      check:
+        function: is_not_null
+        arguments:
+          column: "id"
 
     - name: not_null_created_at
-      function: is_not_null
-      arguments: { col_name: "created_at" }
       criticality: error
+      check:
+        function: is_not_null
+        arguments:
+          column: "created_at"
 
     - name: unique_id
-      function: unique
-      arguments: { col_name: "id" }
       criticality: error
+      check:
+        function: is_unique
+        arguments:
+          column: "id"
 
     - name: amount_range
-      function: is_in_range
-      arguments: { col_name: "amount", min_limit: 0.0, max_limit: 100000.0 }
-      criticality: error   
+      criticality: error
+      check:
+        function: is_in_range
+        arguments:
+          column: "amount"
+          min_limit: 0          # use int; se precisar decimal, passe como string, ex: "0.01"
+          max_limit: 100000     # idem: "100000.0"
 
-  # exemplo de regra custom SQL
   custom:
     - name: created_at_valid_date
-      function: sql_expression
-      arguments:
-        expression: "to_date(created_at, 'yyyy-MM-dd') IS NOT NULL"
-        msg: "created_at inválido"
       criticality: error
+      check:
+        function: sql_expression
+        arguments:
+          expression: "to_date(created_at, 'yyyy-MM-dd') IS NOT NULL"
+          msg: "created_at inválido"
 
 etl:
-  # pipeline padrão aplicado nos registros válidos
   standard:
     - method: trim_columns
-      args: { columns: ["customer_id"] }
+      args:
+        columns: ["customer_id"]
 
     - method: normalize_dates
-      args: { columns: ["created_at"], format: "yyyy-MM-dd", project_ano_mes: true }
+      args:
+        columns: ["created_at"]
+        format: "yyyy-MM-dd"
+        project_ano_mes: true
 
     - method: cast_columns
-      args: { mapping: { "amount": "double" } }
+      args:
+        mapping:
+          amount: "double"
 
     - method: deduplicate
-      args: { keys: ["id"], order_by: ["created_at desc"] }
+      args:
+        keys: ["id"]
+        order_by: ["created_at desc"]
 
 quarantine:
-  # para os que falharam (criticality=error), mandamos para remediação:
   remediate:
-    # 1) corrigir created_at inválido
     - method: coerce_date
-      args: { column: "created_at", from_patterns: ["dd/MM/yyyy","MM-dd-yyyy"], to_format: "yyyy-MM-dd" }
+      args:
+        column: "created_at"
+        from_patterns: ["dd/MM/yyyy","MM-dd-yyyy"]
+        to_format: "yyyy-MM-dd"
 
-    # 2) amount negativo -> zerar
     - method: clamp_range
-      args: { column: "amount", min: 0.0 }
+      args:
+        column: "amount"
+        min: 0.0
 
-    # 3) nulos em id -> descartar (exemplo de policy)
     - method: drop_if_null
-      args: { columns: ["id"] }
+      args:
+        columns: ["id"]
 
-  # (opcional) registrar a quarentena bruta
   sink:
-    table: "monitoring.quarantine.sales_bronze_teste"   # log dos dados que não passaram no health check
+    table: "monitoring.quarantine.sales_bronze_teste"
 
 customs:
-  # métodos custom.
   allow: true
   registry:
     - name: my_custom_discount
-      module: "silver.customs.sales_rules"
+      module: "customs.sales_rules"
       method: "apply_discount_if_high_value"
       args_schema:
-        percent: { type: number, min: 0, max: 50 }
+        percent:   { type: number, min: 0, max: 50 }
         threshold: { type: number, min: 0 }
   use_in:
-    - stage: "standard"    # pode usar em standard ou em quarantine.remediate
+    - stage: "standard"
       method: "my_custom_discount"
-      args: { percent: 5.0, threshold: 1000.0 }
+      args:
+        percent: 5.0
+        threshold: 1000.0

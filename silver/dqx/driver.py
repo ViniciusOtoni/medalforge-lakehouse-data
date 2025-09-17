@@ -3,57 +3,28 @@ from pyspark.sql import DataFrame
 from databricks.labs.dqx.engine import DQEngine
 from databricks.sdk import WorkspaceClient
 
-def _normalize_checks(dqx_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _collect_checks(dqx_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Aceita dois formatos:
-      A) Achato:
-         - name, function, arguments, criticality
-      B) Nativo do DQX:
-         - name, criticality, check: { function, arguments }
-
-    Converte tudo para (B).
+    Recebe o dqx_cfg já normalizado (ex.: cfg.dqx.model_dump()) e
+    retorna a lista de checks no formato nativo do DQX:
+      { name, criticality, check: { function, arguments } }
     """
     checks: List[Dict[str, Any]] = []
-    default_crit = dqx_cfg.get("criticality_default", "error")
-
-    raw_items = []
-    raw_items.extend(dqx_cfg.get("checks", []) or [])
-    raw_items.extend(dqx_cfg.get("custom", []) or [])
-
-    for item in raw_items:
-        # já está no formato DQX?
-        if "check" in item and isinstance(item["check"], dict):
+    for section in ("checks", "custom"):
+        items = dqx_cfg.get(section, []) or []
+        for item in items:
+            # sanity-check para mensagens de erro mais claras
+            if "check" not in item or "function" not in item["check"]:
+                raise ValueError(f"Item DQX inválido (esperado 'check.function'): {item}")
             checks.append(item)
-            continue
-
-        # formato achato -> embrulhar em "check"
-        name = item.get("name")
-        func = item.get("function")
-        args = item.get("arguments", {}) or {}
-        crit = item.get("criticality", default_crit)
-
-        if not func:
-            raise ValueError(f"Cada regra precisa de 'function'. Faltou em: {item}")
-
-        normalized = {
-            "name": name or func,
-            "criticality": crit,
-            "check": {
-                "function": func,
-                "arguments": args
-            }
-        }
-        checks.append(normalized)
-
     return checks
 
-def apply_checks_split(df: DataFrame, dqx_config: Dict[str, Any]) -> Tuple[DataFrame, DataFrame]:
+def apply_checks_split(df: DataFrame, dqx_cfg: Dict[str, Any]) -> Tuple[DataFrame, DataFrame]:
     """
-    Usa o DQEngine para aplicar checks definidos por metadata (inclui 'custom' com sql_expression)
-    e retorna (valid_df, quarantine_df).
+    Aplica as regras via DQEngine e retorna (valid_df, quarantine_df).
+    dqx_cfg deve vir de cfg.dqx.model_dump() (Pydantic já padroniza o formato).
     """
-    ws = WorkspaceClient()
-    engine = DQEngine(ws)
-    checks = _normalize_checks(dqx_config)
+    engine = DQEngine(WorkspaceClient())
+    checks = _collect_checks(dqx_cfg)
     valid_df, quarantine_df = engine.apply_checks_by_metadata_and_split(df, checks, globals())
     return valid_df, quarantine_df
