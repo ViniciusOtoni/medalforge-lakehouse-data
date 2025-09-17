@@ -19,7 +19,7 @@ class TargetCfg(BaseModel):
 # ---------------- DQX ----------------
 # DQX nativo pede: { name, criticality, check: { function, arguments } }
 
-AllowedFn = Literal["is_not_null", "is_unique", "is_in_range", "sql_expression"]
+AllowedFn = str
 
 class DQInnerCheck(BaseModel):
     function: AllowedFn
@@ -43,8 +43,10 @@ class DQCheck(BaseModel):
 
     @staticmethod
     def _alias_function(fn: str) -> str:
-        # Compatibilidade: 'unique' → 'is_unique'
-        return {"unique": "is_unique"}.get(fn, fn)
+        return {
+            "unique": "is_unique",
+            "not_null": "is_not_null"
+        }.get(fn, fn)
 
     @staticmethod
     def _normalize_args(fn: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -64,17 +66,21 @@ class DQCheck(BaseModel):
 
         # is_unique: requer 'columns' (lista)
         if fn == "is_unique":
-            # se vier 'column', converte para 'columns'
             if "column" in args and "columns" not in args:
-                args["columns"] = [args.pop("column")]
-            # se vier como string, vira lista
+                col_val = args.pop("column")
+                # Se 'column' já é uma lista, usa diretamente; se for string, coloca em lista
+                if isinstance(col_val, list):
+                    args["columns"] = col_val
+                else:
+                    args["columns"] = [col_val]
+            # Se 'columns' existe mas é string única, transforma em lista com um elemento
             if "columns" in args and isinstance(args["columns"], str):
                 args["columns"] = [args["columns"]]
-            # default p/ nulls_distinct (opcional)
+            # Normaliza 'nulls_distinct' para booleano, se presente
             if "nulls_distinct" in args:
                 args["nulls_distinct"] = bool(args["nulls_distinct"])
 
-        return args
+                return args
 
     @model_validator(mode="after")
     def _coalesce_to_native(self):
