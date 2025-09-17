@@ -35,7 +35,7 @@ dqx:
       check:
         function: is_unique
         arguments:
-          column: "id"
+          column: ["id"]
 
     - name: amount_range
       criticality: error

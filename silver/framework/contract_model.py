@@ -10,8 +10,9 @@ class TargetWriteCfg(BaseModel):
     zorder_by: List[str] = Field(default_factory=list)
 
 class TargetCfg(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)  
     catalog: str
-    schema: str
+    schema_name: str = Field(alias="schema")
     table: str
     write: TargetWriteCfg
 
@@ -53,16 +54,26 @@ class DQCheck(BaseModel):
         if "col_name" in args and "column" not in args:
             args["column"] = args.pop("col_name")
 
-        # Tipos aceitos por is_in_range: int|date|datetime|str|Column|None
+        # is_in_range: tipos aceitos p/ min/max
         if fn == "is_in_range":
             for k in ("min_limit", "max_limit"):
                 if k in args:
                     v = args[k]
                     if isinstance(v, float):
-                        if float(v).is_integer():
-                            args[k] = int(v)
-                        else:
-                            args[k] = str(v)
+                        args[k] = int(v) if float(v).is_integer() else str(v)
+
+        # is_unique: requer 'columns' (lista)
+        if fn == "is_unique":
+            # se vier 'column', converte para 'columns'
+            if "column" in args and "columns" not in args:
+                args["columns"] = [args.pop("column")]
+            # se vier como string, vira lista
+            if "columns" in args and isinstance(args["columns"], str):
+                args["columns"] = [args["columns"]]
+            # default p/ nulls_distinct (opcional)
+            if "nulls_distinct" in args:
+                args["nulls_distinct"] = bool(args["nulls_distinct"])
+
         return args
 
     @model_validator(mode="after")
@@ -136,4 +147,4 @@ class SilverYaml(BaseModel):
 
     @property
     def target_fqn(self) -> str:
-        return f"{self.target.catalog}.{self.target.schema}.{self.target.table}"
+        return f"{self.target.catalog}.{self.target.schema_name}.{self.target.table}"
