@@ -76,9 +76,9 @@ jobs:
 
           # login com SPN dinâmica (tem RBAC Storage Blob Data Contributor)
           az login --service-principal \
-            -u "$DYN_SPN_ID" \
-            -p "$DYN_SPN_SECRET" \
-            --tenant "$DYN_TENANT_ID" >/dev/null
+            --username "$DYN_SPN_ID" \
+            --tenant   "${{ secrets.ARM_TENANT_ID }}" \
+            --password="$DYN_SPN_SECRET" >/dev/null
 
           # baixa o tfstate
           az storage blob download \
