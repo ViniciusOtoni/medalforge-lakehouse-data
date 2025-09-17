@@ -95,7 +95,7 @@ quarantine:
         columns: ["id"]
 
   sink:
-    table: "monitoring.quarantine.sales_bronze_data"
+    table: "silver.quarantine.sales_bronze_data"
 
 customs:
   allow: true
