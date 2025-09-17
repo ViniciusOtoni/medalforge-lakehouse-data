@@ -10,53 +10,52 @@ class TargetWriteCfg(BaseModel):
     zorder_by: List[str] = Field(default_factory=list)
 
 class TargetCfg(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)  
+    # evita warning por campo 'schema' colidir com metodo BaseModel.schema()
+    model_config = ConfigDict(populate_by_name=True)
     catalog: str
     schema_name: str = Field(alias="schema")
     table: str
     write: TargetWriteCfg
 
 # ---------------- DQX ----------------
-# DQX nativo pede: { name, criticality, check: { function, arguments } }
-
-AllowedFn = str
+# Formato nativo DQX: { name, criticality, check: { function, arguments } }
+# Permitimos QUALQUER função (str) para não engessar os checks.
 
 class DQInnerCheck(BaseModel):
-    function: AllowedFn
+    function: str
     arguments: Dict[str, Any] = Field(default_factory=dict)
+
+    # se vier None, vira {}
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def _args_none_to_empty(cls, v):
+        return {} if v is None else v
 
 class DQCheck(BaseModel):
-    # Aceita ambos formatos:
-    #  A) Nativo:   { name, criticality, check: { function, arguments } }
-    #  B) Achatado: { name, criticality, function, arguments }
     name: str
     criticality: Literal["error", "warning"] = "error"
-
-    # Nativo
-    check: Optional[DQInnerCheck] = None
-
-    # Achatado (retrocompatibilidade)
-    function: Optional[str] = None
-    arguments: Dict[str, Any] = Field(default_factory=dict)
+    check: DQInnerCheck
 
     model_config = ConfigDict(extra="forbid")
 
+    # -------- helpers de normalização (genéricos, sem 'xunbar' regra específica) --------
     @staticmethod
     def _alias_function(fn: str) -> str:
+        # aliases amistosos que apareceram no campo:
         return {
             "unique": "is_unique",
-            "not_null": "is_not_null"
+            "not_null": "is_not_null",
         }.get(fn, fn)
 
     @staticmethod
     def _normalize_args(fn: str, args: Dict[str, Any]) -> Dict[str, Any]:
         args = dict(args or {})
 
-        # col_name → column
+        # retrocompat: col_name -> column
         if "col_name" in args and "column" not in args:
             args["column"] = args.pop("col_name")
 
-        # is_in_range: tipos aceitos p/ min/max
+        # is_in_range: DQX não curte float puro p/ limites; int se integral, senão str
         if fn == "is_in_range":
             for k in ("min_limit", "max_limit"):
                 if k in args:
@@ -64,45 +63,75 @@ class DQCheck(BaseModel):
                     if isinstance(v, float):
                         args[k] = int(v) if float(v).is_integer() else str(v)
 
-        # is_unique: requer 'columns' (lista)
+        # is_unique: aceitar column/columns (str|list) e achatar listas aninhadas
         if fn == "is_unique":
+            # mover column -> columns, preservando lista se já for lista
             if "column" in args and "columns" not in args:
                 col_val = args.pop("column")
-                # Se 'column' já é uma lista, usa diretamente; se for string, coloca em lista
                 if isinstance(col_val, list):
                     args["columns"] = col_val
                 else:
                     args["columns"] = [col_val]
-            # Se 'columns' existe mas é string única, transforma em lista com um elemento
-            if "columns" in args and isinstance(args["columns"], str):
-                args["columns"] = [args["columns"]]
-            # Normaliza 'nulls_distinct' para booleano, se presente
-            if "nulls_distinct" in args:
-                args["nulls_distinct"] = bool(args["nulls_distinct"])
+            # garantir lista simples
+            if "columns" in args:
+                cols = args["columns"]
+                if isinstance(cols, str):
+                    cols = [cols]
+                # flatten defensivo (evita [['id']])
+                flat = []
+                for c in cols:
+                    if isinstance(c, list):
+                        flat.extend(c)
+                    else:
+                        flat.append(c)
+                args["columns"] = flat
+            # normaliza nulls_distinct se vier como string
+            if "nulls_distinct" in args and isinstance(args["nulls_distinct"], str):
+                args["nulls_distinct"] = args["nulls_distinct"].lower() in ("1", "true", "yes")
 
-                return args
+        return args
 
-    @model_validator(mode="after")
-    def _coalesce_to_native(self):
-        # Se veio no formato achatado, criar self.check
-        if self.check is None:
-            if not self.function:
-                raise ValueError("DQCheck requer 'check' ou 'function'")
-            fn = self._alias_function(self.function)
-            fn_norm = fn  # validação do literal acontecerá ao construir DQInnerCheck
-            args_norm = self._normalize_args(fn_norm, self.arguments)
-            self.check = DQInnerCheck(function=fn_norm, arguments=args_norm)
+    # -------- normalização estrutural ANTES da validação de campos --------
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_shape_before(cls, data: Any):
+        """
+        Aceita:
+          A) Nativo:   { name, criticality, check: { function, arguments } }
+          B) Achatado: { name, criticality, function, arguments }
+        Converte tudo para (A) antes da validação.
+        Também aplica normalizações leves de argumentos comuns.
+        """
+        if not isinstance(data, dict):
+            return data
 
-        else:
-            # Se já veio no formato nativo, ainda normaliza alias e argumentos
-            fn = self._alias_function(self.check.function)
-            args_norm = self._normalize_args(fn, self.check.arguments)
-            self.check = DQInnerCheck(function=fn, arguments=args_norm)
+        # extrai formato atual
+        name = data.get("name")
+        criticality = data.get("criticality", "error")
 
-        # Zera campos achatados para evitar dump duplicado
-        self.function = None
-        self.arguments = {}
-        return self
+        # coleta function/arguments de onde estiverem
+        check = data.get("check") or {}
+        fn = check.get("function", data.get("function"))
+        args = check.get("arguments", data.get("arguments", {}))
+
+        if fn is None:
+            # mantém erro claro, mas só depois de tentar coagir
+            raise ValueError(f"DQCheck '{name}' sem 'function' definido (check.function ou function)")
+
+        # aliases + normalizações
+        fn = cls._alias_function(str(fn))
+        args = cls._normalize_args(fn, args)
+
+        # reconstrói shape nativo e remove campos achatados
+        data = {
+            "name": name,
+            "criticality": criticality,
+            "check": {
+                "function": fn,
+                "arguments": args or {},
+            },
+        }
+        return data
 
 class DQXCfg(BaseModel):
     criticality_default: Literal["error", "warning"] = "error"
