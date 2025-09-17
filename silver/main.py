@@ -12,6 +12,7 @@ from framework import etl_core
 from framework.customs_engine import apply_customs_stage
 from dqx.driver import apply_checks_split
 from utils.merge import merge_upsert
+from utils.uc import split_fqn, ensure_catalog_schema
 
 spark = SparkSession.builder.getOrCreate()
 
@@ -47,7 +48,10 @@ def run(contract_path: str):
 
     # 3) Sink opcional da quarentena bruta
     if cfg.quarantine.sink and "table" in cfg.quarantine.sink:
-        quarantine_df.write.mode("append").saveAsTable(cfg.quarantine.sink["table"])
+        sink_tbl = cfg.quarantine.sink["table"]  # ex: "monitoring.quarantine.sales_bronze_teste"
+        cat, sch, _ = split_fqn(sink_tbl)
+        ensure_catalog_schema(cat, sch)
+        quarantine_df.write.mode("append").saveAsTable(sink_tbl)
 
     # 4) Remediação (quarantine.remediate)
     if cfg.quarantine.remediate:
@@ -77,7 +81,15 @@ def run(contract_path: str):
 
     # 10) Persistir os que ainda falharam após remediação
     if still_bad_df.count() > 0:
-        still_tbl = f"monitoring.quarantine.{cfg.target.table}_rejected"
+        if cfg.quarantine.sink and "table" in cfg.quarantine.sink:
+            cat, sch, _ = split_fqn(cfg.quarantine.sink["table"])
+        else:
+            # fallback: usa o mesmo catálogo da Silver e um schema derivado
+            cat = cfg.target.catalog
+            sch = f"{cfg.target.schema_name}_quarantine"
+
+        ensure_catalog_schema(cat, sch)
+        still_tbl = f"{cat}.{sch}.{cfg.target.table}_rejected"
         still_bad_df.write.mode("append").saveAsTable(still_tbl)
 
     print(f"[OK] Silver gravada em {tgt}")
