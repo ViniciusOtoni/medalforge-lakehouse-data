@@ -46,12 +46,17 @@ jobs:
       - name: Switch to dynamic SPN
         run: |
           set -euo pipefail
+
+          # sanity-checks (não vazias)
+          : "${DYN_SPN_ID:?DYN_SPN_ID vazio}"
+          : "${DYN_SPN_SECRET:?DYN_SPN_SECRET vazio}"
+
           az logout || true
           az login --service-principal \
-            -u "${{ env.DYN_SPN_ID }}" \
-            -p "${{ env.DYN_SPN_SECRET }}" \
-            --tenant "${{ secrets.ARM_TENANT_ID }}"
-          # garante a subscription correta
+            --username "$DYN_SPN_ID" \
+            --tenant   "${{ secrets.ARM_TENANT_ID }}" \
+            --password="$DYN_SPN_SECRET"
+
           az account set --subscription "${{ secrets.ARM_SUBSCRIPTION_ID }}"
           az account show -o table
 
