@@ -90,7 +90,16 @@ def run(contract_path: str):
 
     # 9) Gravar Silver
     tgt = cfg.target_fqn
-    merge_upsert(final_df, tgt, cfg.target.write.merge_keys, cfg.target.write.zorder_by)
+    cat, sch, _ = split_fqn(tgt)
+    ensure_catalog_schema(cat, sch)
+
+    merge_upsert(
+        final_df,
+        tgt,
+        cfg.target.write.merge_keys,
+        cfg.target.write.zorder_by,
+        partition_by=cfg.target.write.partition_by  
+    )
 
     # 10) Rejeitados pós-remediação: (opcional) strip para não “sujar” a tabela final de rejeitados
     if still_bad_df.count() > 0:
@@ -106,3 +115,11 @@ def run(contract_path: str):
         still_bad_df.write.mode("append").saveAsTable(still_tbl)
 
     print(f"[OK] Silver gravada em {tgt}")
+
+    print(
+        "Counts -> valid_df:", valid_df.count(),
+        "fixed_valid_df:", fixed_valid_df.count()
+    )
+
+    print("final_df:", final_df.count())
+
