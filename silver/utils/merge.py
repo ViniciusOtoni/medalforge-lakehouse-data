@@ -20,7 +20,7 @@ def _ensure_external_table_from_df(
     """
     Se external_base for fornecido, cria a Tabela Delta EXTERNA com LOCATION,
     escrevendo um Delta "vazio" no path para materializar o schema/particionamento.
-    Se external_base for None, cria tabela managed a partir do df.limit(0).
+    Se external_base for None, cria tabela managed com schema do df (requer Root Credential).
     """
     if spark.catalog.tableExists(tgt_fqn):
         return
@@ -30,16 +30,30 @@ def _ensure_external_table_from_df(
         writer = df.limit(0).write.format("delta")
         if partition_by:
             writer = writer.partitionBy(*partition_by)
-        # materializa um delta vazio no path externo
-        writer.mode("overwrite").save(path)
-        # registra a tabela EXTERNA apontando para o path
-        spark.sql(f"CREATE TABLE {tgt_fqn} USING DELTA LOCATION '{path}'")
+        writer.mode("overwrite").save(path)  # materializa delta vazio no path
+        spark.sql(f"CREATE TABLE {tgt_fqn} USING DELTA LOCATION '{path}'")  # registra EXTERNAL
     else:
-        # managed table (vai exigir Root Storage Credential no metastore!)
         writer = df.limit(0).write
         if partition_by:
             writer = writer.partitionBy(*partition_by)
         writer.saveAsTable(tgt_fqn)
+
+def append_external(
+    df: DataFrame,
+    tgt_fqn: str,
+    external_base: str,
+    partition_by: Optional[List[str]] = None,
+):
+    """
+    Garante a existência da tabela EXTERNA (registrada no metastore)
+    e faz append dos dados no mesmo path externo.
+    """
+    # cria/garante external table (schema do df se for primeira vez)
+    _ensure_external_table_from_df(df, tgt_fqn, external_base=external_base, partition_by=partition_by)
+
+    # escreve no mesmo path externo
+    path = _external_path_for(tgt_fqn, external_base)
+    df.write.format("delta").mode("append").save(path)
 
 def merge_upsert(
     df: DataFrame,

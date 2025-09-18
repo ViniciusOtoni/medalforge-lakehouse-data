@@ -58,10 +58,18 @@ def run(contract_path: str):
 
     # 3) Sink da quarentena BRUTA (com motivos). NÃO stripar aqui!
     if cfg.quarantine.sink and "table" in cfg.quarantine.sink:
-        sink_tbl = cfg.quarantine.sink["table"]  # ex: "monitoring.quarantine.sales_bronze_teste"
+        sink_tbl = cfg.quarantine.sink["table"]  # ex.: silver.quarantine.sales_bronze_data
         cat, sch, _ = split_fqn(sink_tbl)
         ensure_catalog_schema(cat, sch)
-        quarantine_df.write.mode("append").saveAsTable(sink_tbl)
+
+        # grava como EXTERNAL (append)
+        from utils.merge import append_external
+        append_external(
+            quarantine_df,
+            sink_tbl,
+            external_base="abfss://silver@medalforgestorage.dfs.core.windows.net",
+            partition_by=None
+        )
 
     # 4) Remediação: strip antes de rodar ETL de remediação
     if cfg.quarantine.remediate:
@@ -108,7 +116,7 @@ def run(contract_path: str):
         cfg.target.write.merge_keys,
         cfg.target.write.zorder_by,
         partition_by=cfg.target.write.partition_by,   # <— usa particionamento do contrato
-        external_base=f"abfss://silver@medalforgestorage.dfs.core.windows.net/{cfg.target.schema}/{cfg.target.table}"
+        external_base=f"abfss://silver@medalforgestorage.dfs.core.windows.net"
     )
 
     # sanity check pós-merge (tabela existe?)
@@ -127,9 +135,18 @@ def run(contract_path: str):
             cat = cfg.target.catalog
             sch = f"{cfg.target.schema_name}_quarantine"
         ensure_catalog_schema(cat, sch)
+
         still_tbl = f"{cat}.{sch}.{cfg.target.table}_rejected"
-        still_bad_df.write.mode("append").saveAsTable(still_tbl)
+
+        from utils.merge import append_external
+        append_external(
+            still_bad_df,
+            still_tbl,
+            external_base="abfss://silver@medalforgestorage.dfs.core.windows.net",
+            partition_by=None
+        )
         log(f"rejected saved at {still_tbl} rows={spark.table(still_tbl).count()}")
+
 
     log(f"[OK] Silver gravada em {tgt}")
 
