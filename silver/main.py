@@ -108,6 +108,7 @@ def run(contract_path: str):
         cfg.target.write.merge_keys,
         cfg.target.write.zorder_by,
         partition_by=cfg.target.write.partition_by,   # <— usa particionamento do contrato
+        external_base=f"abfss://silver@medalforgestorage.dfs.core.windows.net/{cfg.target.schema}/{cfg.target.table}"
     )
 
     # sanity check pós-merge (tabela existe?)
