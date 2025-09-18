@@ -82,7 +82,14 @@ quarantine:
     - method: coerce_date
       args:
         column: "created_at"
-        from_patterns: ["dd/MM/yyyy","MM-dd-yyyy"]
+        from_patterns:
+          - "M/d/yyyy"
+          - "MM/dd/yyyy"
+          - "d/M/yyyy"
+          - "dd/MM/yyyy"
+          - "yyyy-MM-dd"  
+          - "MM-dd-yyyy"
+          - "M-d-yyyy"
         to_format: "yyyy-MM-dd"
 
     - method: clamp_range
