@@ -23,14 +23,10 @@ targets:
       include:
         - bronze/**
         - silver/**
-        - monitoring/**
-        - tests/**
 
       exclude:
         - .git/**
         - .github/**
-        - .assets/
-        - .data/
 
     resources:
       jobs:

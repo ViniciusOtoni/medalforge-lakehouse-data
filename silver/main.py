@@ -1,5 +1,4 @@
 import argparse
-import yaml
 from typing import List
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
@@ -85,11 +84,20 @@ def run(contract_path: str):
         valid_df = apply_customs_stage(valid_df, cfg.customs, stage_name="standard")
         fixed_valid_df = apply_customs_stage(fixed_valid_df, cfg.customs, stage_name="standard")
 
-    # 8) Union válidos + válidos remediados
+    def log(msg: str):
+        print(msg, flush=True)
+
+     # 8) Union válidos + válidos remediados
     final_df = valid_df.unionByName(fixed_valid_df, allowMissingColumns=True)
 
+    # DEBUG útil (vira ação e força avaliar o plano):
+    log(f"valid_df.count()={valid_df.count()} | fixed_valid_df.count()={fixed_valid_df.count()} | final_df.count()={final_df.count()}")
+    log(f"final_df schema = {[ (c.name, c.dataType.simpleString()) for c in final_df.schema ]}")
+
     # 9) Gravar Silver
-    tgt = cfg.target_fqn
+    tgt = cfg.target_fqn  # ex.: silver.sales.sales_clean
+
+    # **GARANTE catálogo/esquema do ALVO** (antes de salvar/merge)
     cat, sch, _ = split_fqn(tgt)
     ensure_catalog_schema(cat, sch)
 
@@ -98,28 +106,44 @@ def run(contract_path: str):
         tgt,
         cfg.target.write.merge_keys,
         cfg.target.write.zorder_by,
-        partition_by=cfg.target.write.partition_by  
+        partition_by=cfg.target.write.partition_by,   # <— usa particionamento do contrato
     )
 
-    # 10) Rejeitados pós-remediação: (opcional) strip para não “sujar” a tabela final de rejeitados
+    # sanity check pós-merge (tabela existe?)
+    exists = spark.catalog.tableExists(tgt)
+    log(f"tableExists({tgt})={exists}")
+    if exists:
+        cnt = spark.table(tgt).count()
+        log(f"{tgt} row_count={cnt}")
+
+    # 10) Rejeitados pós-remediação
     if still_bad_df.count() > 0:
+        still_bad_df = _strip_dqx_cols(still_bad_df)
         if cfg.quarantine.sink and "table" in cfg.quarantine.sink:
             cat, sch, _ = split_fqn(cfg.quarantine.sink["table"])
         else:
-            # fallback: usa o mesmo catálogo da Silver e um schema derivado
             cat = cfg.target.catalog
             sch = f"{cfg.target.schema_name}_quarantine"
-
         ensure_catalog_schema(cat, sch)
         still_tbl = f"{cat}.{sch}.{cfg.target.table}_rejected"
         still_bad_df.write.mode("append").saveAsTable(still_tbl)
+        log(f"rejected saved at {still_tbl} rows={spark.table(still_tbl).count()}")
 
-    print(f"[OK] Silver gravada em {tgt}")
+    log(f"[OK] Silver gravada em {tgt}")
 
-    print(
-        "Counts -> valid_df:", valid_df.count(),
-        "fixed_valid_df:", fixed_valid_df.count()
-    )
+def _parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--contract_path", required=True, help="Caminho do contrato YAML da Silver")
+    return p.parse_args()
 
-    print("final_df:", final_df.count())
-
+if __name__ == "__main__":
+    args = _parse_args()
+    print(f"[BOOT] Iniciando silver/main.py com contract_path={args.contract_path}", flush=True)
+    try:
+        run(args.contract_path)
+        print("[DONE] silver/main.py finalizado com sucesso", flush=True)
+    except Exception as e:
+        # garante que o Databricks Jobs marque como FAILED
+        import traceback, sys
+        print("[ERROR] Falha na execução:\n" + traceback.format_exc(), flush=True)
+        sys.exit(1)
