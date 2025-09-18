@@ -1,5 +1,5 @@
 bundle:
-  name: one-data-bronze
+  name: one-data-proccess
   databricks_cli_version: ">=0.220.0"
 
 variables:
