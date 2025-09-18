@@ -49,7 +49,6 @@ def _parse_args() -> Dict[str, Any]:
     ap.add_argument("--contract_path", required=True)
     ap.add_argument("--mode", default="validate+plan")
     ap.add_argument("--reprocess_label", default=None)
-    ap.add_argument("--trigger_override", default=None)           # opcional (ex.: "processingTime:5 minutes")
     ap.add_argument("--include_existing_override", default=None)  # "true" | "false"
     args = ap.parse_args()
     d = vars(args)
@@ -109,6 +108,7 @@ def _ensure_table(
         schema_struct=schema_struct,     
         partitions=partitions,
         comment="Bronze table (LOCATION hard-coded; contract-managed)",
+        column_comments=mgr.column_comments(),
     )
 
 def _plan_dict(mgr: DataContractManager, payload: Dict[str, Any], paths: Dict[str, str],
@@ -190,7 +190,7 @@ def main():
                 source_directory=paths["source_directory"],
                 checkpoint_location=paths["checkpointLocation"],
             )
-            ingestor.ingest(trigger=trigger, include_existing_files=include_existing)
+            ingestor.ingest(include_existing_files=include_existing)
             outputs["status"].append("ingested")
             outputs["details"]["ingest"] = {
                 "table": payload["fqn"],

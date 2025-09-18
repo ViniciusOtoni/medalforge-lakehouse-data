@@ -1,3 +1,4 @@
+# managers/data_contract_manager.py
 from __future__ import annotations
 from typing import List, Optional, Dict, Union, Any
 from pydantic import BaseModel, Field, validator, constr
@@ -7,17 +8,11 @@ from pyspark.sql.types import (
 )
 import json, re
 
-# -------------------------
-# Identificadores e tipos suportados
-# -------------------------
-
 _IDENT_REGEX = r"^[A-Za-z_][A-Za-z0-9_]*$"
-
-# Compatibilidade Pydantic v2 (pattern) e v1 (regex)
 try:
-    Ident = constr(strip_whitespace=True, min_length=1, pattern=_IDENT_REGEX)  # v2
+    Ident = constr(strip_whitespace=True, min_length=1, pattern=_IDENT_REGEX)
 except TypeError:
-    Ident = constr(strip_whitespace=True, min_length=1, regex=_IDENT_REGEX)    # v1
+    Ident = constr(strip_whitespace=True, min_length=1, regex=_IDENT_REGEX)
 
 SUPPORTED_DTYPES = {
     "string": StringType,
@@ -29,14 +24,7 @@ SUPPORTED_DTYPES = {
     "timestamp": TimestampType, "timestamptz": TimestampType,
 }
 
-# -------------------------
-# Modelos de contrato (Pydantic)
-# -------------------------
-
 class ColumnSpec(BaseModel):
-    """
-    Coluna do contrato. Caso o dtype não seja informado, cai no default 'string'.
-    """
     name: Ident
     dtype: constr(strip_whitespace=True, min_length=1) = "string"
     comment: Optional[str] = None
@@ -48,11 +36,6 @@ class ColumnSpec(BaseModel):
         return aliases.get(v, v)
 
 class SourceSpec(BaseModel):
-    """
-    Configurações de leitura (Autoloader):
-      - format: csv | json | txt  (txt = tratado como csv com outro delimiter)
-      - options: opções do leitor (mescladas com defaults no manager)
-    """
     format: str
     options: Dict[str, Any] = Field(default_factory=dict)
 
@@ -77,18 +60,11 @@ class SourceSpec(BaseModel):
             if "multiline" in opts and not isinstance(opts["multiline"], bool):
                 raise ValueError("options.multiline (json) deve ser booleano")
         elif fmt == "txt":
-            # txt será tratado como csv; delimiter é obrigatório
             if "delimiter" not in opts or not isinstance(opts["delimiter"], str):
                 raise ValueError("options.delimiter (txt) é obrigatório e deve ser string")
         return opts
 
 class TableContract(BaseModel):
-    """
-    Contrato de dados da Bronze (sem ingestion/storage no contrato).
-    Regras:
-      - Partições do usuário devem existir em 'columns'.
-      - 'ingestion_date' SEMPRE é adicionada como partição efetiva (coluna de auditoria).
-    """
     version: Optional[str] = "1.0"
     catalog: Ident = "bronze"
     schema: Ident
@@ -121,7 +97,6 @@ class TableContract(BaseModel):
 
     @property
     def effective_partitions(self) -> List[str]:
-        """Partições efetivas = [partições do usuário..., 'ingestion_date'] (sem duplicar)."""
         unique: List[str] = []
         for p in self.partitions:
             if p not in unique:
@@ -130,22 +105,7 @@ class TableContract(BaseModel):
             unique.append("ingestion_date")
         return unique
 
-# -------------------------
-# Manager
-# -------------------------
-
 class DataContractManager:
-    """
-    Valida o contrato e entrega artefatos para a ingestão (sem executar Autoloader).
-
-    Entrega:
-      - fqn (bronze.schema.table)
-      - schema Spark tipado (fallback 'string' quando dtype ausente)
-      - formato ('csv' | 'json')  [txt => 'csv']
-      - opções do leitor (defaults mesclados com as do contrato)
-      - partições efetivas (user..., 'ingestion_date')
-    """
-
     def __init__(self, contract: Union[dict, str, TableContract]):
         if isinstance(contract, TableContract):
             self._model = contract
@@ -156,7 +116,7 @@ class DataContractManager:
         else:
             raise ValueError("Use dict, JSON string ou TableContract.")
 
-    # ---- Acessores
+    # --- Acessores
     @property
     def fqn(self) -> str: return self._model.fqn
     @property
@@ -172,14 +132,23 @@ class DataContractManager:
     @property
     def column_names(self) -> List[str]: return [c.name for c in self._model.columns]
 
-    # ---- Defaults de leitura por formato
+    # 🔎 NOVO: comentários de coluna a partir do contrato
+    def column_comments(self) -> Dict[str, str]:
+        out: Dict[str, str] = {}
+        for c in self._model.columns:
+            if c.comment and c.comment.strip():
+                out[c.name] = c.comment.strip()
+        
+        out.setdefault("ingestion_ts", "Ingestion timestamp (UTC)")
+        out.setdefault("ingestion_date", "Ingestion date (UTC)")
+        return out
+
     def _default_reader_options(self, fmt: str) -> Dict[str, Any]:
         if fmt == "csv": return {"header": True, "delimiter": ",", "nullValue": ""}
         if fmt == "json": return {"multiline": False}
-        if fmt == "txt":  return {"header": False}  # txt -> csv + delimiter obrigatório
+        if fmt == "txt":  return {"header": False}
         return {}
 
-    # ---- Schema Spark (tipado; dtype ausente => string)
     def spark_schema_typed(self) -> StructType:
         fields = []
         for c in self._model.columns:
@@ -191,11 +160,10 @@ class DataContractManager:
                 p, s = int(m.group(1)), int(m.group(2))
                 fields.append(StructField(c.name, DecimalType(p, s), True))
                 continue
-            typ = SUPPORTED_DTYPES.get(dt, StringType)  # fallback string
+            typ = SUPPORTED_DTYPES.get(dt, StringType)
             fields.append(StructField(c.name, typ(), True))
         return StructType(fields)
 
-    # ---- Formato e opções para o Autoloader
     def reader_kind(self) -> str:
         fmt = self._model.source.format
         return "csv" if fmt == "txt" else fmt
@@ -207,7 +175,6 @@ class DataContractManager:
             raise ValueError("Para 'txt', options.delimiter é obrigatório.")
         return merged
 
-    # ---- Pacote pronto para runner/ingestor
     def as_ingestion_payload(self) -> Dict[str, Any]:
         return {
             "fqn": self.fqn,
@@ -215,4 +182,5 @@ class DataContractManager:
             "format": self.reader_kind(),
             "reader_options": self.reader_options(),
             "partitions": self.effective_partitions,
+            "column_comments": self.column_comments(),  
         }

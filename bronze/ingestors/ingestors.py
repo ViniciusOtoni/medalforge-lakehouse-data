@@ -1,3 +1,4 @@
+# ingestors/autoloader_ingestors.py
 from __future__ import annotations
 from pyspark.sql import functions as F
 from interfaces.ingestor_interfaces import (
@@ -6,33 +7,9 @@ from interfaces.ingestor_interfaces import (
     UnstructuredDataIngestor,
 )
 
-def _apply_trigger(writer, trigger: str):
-    """
-    Aplica o gatilho no DataStreamWriter:
-      - 'availableNow' => modo D-1
-      - 'processingTime:5 minutes' => contínuo com janela
-    """
-    if trigger == "availableNow":
-        return writer.trigger(availableNow=True)
-    if trigger.startswith("processingTime:"):
-        interval = trigger.split("processingTime:", 1)[1].strip()
-        return writer.trigger(processingTime=interval)
-    # fallback seguro
-    return writer.trigger(availableNow=True)
-
-
 class CSVIngestor(StructuredDataIngestor):
-    """
-    Ingestão de arquivos CSV com Databricks Auto Loader + Delta/UC.
-
-    - 'cloudFiles.schemaLocation' aponta para o mesmo caminho do checkpoint (no BRONZE).
-    - Adiciona 'ingestion_ts' e 'ingestion_date' antes de escrever.
-    - Particiona conforme self.partitions (já inclui 'ingestion_date').
-    """
-
     def ingest(
         self,
-        trigger: str = "availableNow",
         include_existing_files: bool = True,
     ) -> None:
         try:
@@ -45,14 +22,12 @@ class CSVIngestor(StructuredDataIngestor):
                     .schema(self.schema_struct)
             )
 
-            # Opções específicas de CSV
             for k in ("header", "delimiter", "nullValue"):
                 if k in self.reader_options:
                     reader = reader.option(k, self.reader_options[k])
 
             df = reader.load(self.source_directory)
 
-            # Auditoria
             df = (
                 df.withColumn("ingestion_ts", F.current_timestamp())
                   .withColumn("ingestion_date", F.to_date(F.col("ingestion_ts")))
@@ -64,12 +39,13 @@ class CSVIngestor(StructuredDataIngestor):
                   .option("checkpointLocation", self.checkpoint_location)
                   .option("mergeSchema", "true")
                   .outputMode("append")
+                  .trigger(availableNow=True)               
             )
 
             if self.partitions:
                 writer = writer.partitionBy(*self.partitions)
 
-            _apply_trigger(writer, trigger).toTable(self.fqn)
+            writer.toTable(self.fqn)
             print(f"[CSVIngestor] Ingestão concluída em {self.fqn}")
         except Exception as e:
             print(f"[CSVIngestor] Erro: {e}")
@@ -77,13 +53,8 @@ class CSVIngestor(StructuredDataIngestor):
 
 
 class JSONIngestor(SemiStructuredDataIngestor):
-    """
-    Ingestão de arquivos JSON com Databricks Auto Loader + Delta/UC.
-    """
-
     def ingest(
         self,
-        trigger: str = "availableNow",
         include_existing_files: bool = True,
     ) -> None:
         try:
@@ -112,12 +83,13 @@ class JSONIngestor(SemiStructuredDataIngestor):
                   .option("checkpointLocation", self.checkpoint_location)
                   .option("mergeSchema", "true")
                   .outputMode("append")
+                  .trigger(availableNow=True)               
             )
 
             if self.partitions:
                 writer = writer.partitionBy(*self.partitions)
 
-            _apply_trigger(writer, trigger).toTable(self.fqn)
+            writer.toTable(self.fqn)
             print(f"[JSONIngestor] Ingestão concluída em {self.fqn}")
         except Exception as e:
             print(f"[JSONIngestor] Erro: {e}")
@@ -125,13 +97,8 @@ class JSONIngestor(SemiStructuredDataIngestor):
 
 
 class TextIngestor(UnstructuredDataIngestor):
-    """
-    Ingestão de TXT **delimitado** (tratado como CSV com outro delimitador).
-    """
-
     def ingest(
         self,
-        trigger: str = "availableNow",
         include_existing_files: bool = True,
     ) -> None:
         try:
@@ -148,7 +115,6 @@ class TextIngestor(UnstructuredDataIngestor):
                     .option("header", self.reader_options.get("header", False))
                     .option("delimiter", self.reader_options["delimiter"])
             )
-
             if "nullValue" in self.reader_options:
                 reader = reader.option("nullValue", self.reader_options["nullValue"])
 
@@ -165,12 +131,13 @@ class TextIngestor(UnstructuredDataIngestor):
                   .option("checkpointLocation", self.checkpoint_location)
                   .option("mergeSchema", "true")
                   .outputMode("append")
+                  .trigger(availableNow=True)               
             )
 
             if self.partitions:
                 writer = writer.partitionBy(*self.partitions)
 
-            _apply_trigger(writer, trigger).toTable(self.fqn)
+            writer.toTable(self.fqn)
             print(f"[TextIngestor] Ingestão concluída em {self.fqn}")
         except Exception as e:
             print(f"[TextIngestor] Erro: {e}")
