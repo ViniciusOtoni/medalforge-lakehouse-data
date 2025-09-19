@@ -9,7 +9,7 @@ from pyspark.sql.types import (
 class TableManager:
     """
     Garante schemas e tabelas externas no UC, com LOCATION + PARTITIONED BY + TBLPROPERTIES.
-    Agora também aplica comentários por coluna (CREATE novo e ALTER para tabelas existentes).
+    Também aplica comentários por coluna (CREATE e ALTER idempotente).
     """
 
     def __init__(self, spark: SparkSession):
@@ -29,6 +29,7 @@ class TableManager:
 
     # ---------- helpers para DDL ----------
     def _to_sql_type(self, dt: DataType) -> str:
+        # atômicos com nomes "bonitos"
         if isinstance(dt, StringType):    return "STRING"
         if isinstance(dt, IntegerType):   return "INT"
         if isinstance(dt, LongType):      return "BIGINT"
@@ -37,7 +38,8 @@ class TableManager:
         if isinstance(dt, DateType):      return "DATE"
         if isinstance(dt, TimestampType): return "TIMESTAMP"
         if isinstance(dt, DecimalType):   return f"DECIMAL({dt.precision},{dt.scale})"
-        raise ValueError(f"Tipo Spark não suportado no DDL: {dt.simpleString()}")
+        # complexos (array/map/struct) em DDL Spark nativa
+        return dt.simpleString()  # ex.: "array<string>", "map<string,int>", "struct<a:string,b:int>"
 
     def _ddl_columns_with_audit(self, schema_struct: StructType, col_comments: Optional[Dict[str, str]] = None) -> str:
         """
@@ -94,7 +96,7 @@ class TableManager:
         schema_struct: StructType,
         partitions: Optional[Sequence[str]] = None,
         comment: Optional[str] = None,
-        column_comments: Optional[Dict[str, str]] = None,  # 👈 NOVO
+        column_comments: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Cria/garante uma tabela EXTERNA Delta no UC com SCHEMA, PARTITIONED BY, LOCATION e comentários.
@@ -112,9 +114,7 @@ class TableManager:
 
         props = {
             "delta.feature.timestampNtz": "supported",
-            "delta.minReaderVersion": "2",
-            "delta.minWriterVersion": "7",
-            "delta.appendOnly": "true"
+            "delta.appendOnly": "true"   # Bronze: somente append
         }
         props_clause = "TBLPROPERTIES (" + ", ".join([f"'{k}' = '{v}'" for k, v in props.items()]) + ")"
 
@@ -132,5 +132,5 @@ class TableManager:
         """
         self.spark.sql("\n".join(line for line in sql.splitlines() if line.strip()))
 
-        # 🔁 garante/atualiza comentários mesmo se a tabela já existia
+        # garante/atualiza comentários mesmo se a tabela já existia
         self._apply_column_comments(catalog, schema, table, column_comments or {})

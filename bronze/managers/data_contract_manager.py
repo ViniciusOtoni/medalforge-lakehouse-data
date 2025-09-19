@@ -4,14 +4,21 @@ from typing import List, Optional, Dict, Union, Any
 from pydantic import BaseModel, Field, validator, constr
 from pyspark.sql.types import (
     StructType, StructField, StringType, IntegerType, LongType, DoubleType,
-    BooleanType, DateType, TimestampType, DecimalType
+    BooleanType, DateType, TimestampType, DecimalType, DataType
 )
 import json, re
 
+# tenta usar o parser interno de DDL do Spark p/ tipos complexos
+try:
+    # API interna; funciona bem nas versões atuais do DBR
+    from pyspark.sql.types import _parse_datatype_string as _parse_ddl_type
+except Exception:  # pragma: no cover
+    _parse_ddl_type = None
+
 _IDENT_REGEX = r"^[A-Za-z_][A-Za-z0-9_]*$"
 try:
-    Ident = constr(strip_whitespace=True, min_length=1, pattern=_IDENT_REGEX)
-except TypeError:
+    Ident = constr(strip_whitespace=True, min_length=1, pattern=_IDENT_REGEX)  # pydantic v2
+except TypeError:  # pydantic v1
     Ident = constr(strip_whitespace=True, min_length=1, regex=_IDENT_REGEX)
 
 SUPPORTED_DTYPES = {
@@ -89,10 +96,19 @@ class TableContract(BaseModel):
 
     @validator("partitions")
     def partitions_subset(cls, parts: List[str], values: Dict[str, Any]) -> List[str]:
-        cols = {c.name for c in values.get("columns", [])}
-        missing = [p for p in parts if p not in cols]
+        # precisa existir nas colunas
+        cols_by_name = {c.name: c for c in values.get("columns", [])}
+        missing = [p for p in parts if p not in cols_by_name]
         if missing:
             raise ValueError(f"partições não existem nas colunas: {missing}")
+        # impede tipos complexos em partições (limitação do Delta/UC)
+        complex_in_partition = []
+        for p in parts:
+            t = cols_by_name[p].dtype.strip().lower()
+            if any(t.startswith(prefix) for prefix in ("array<", "map<", "struct<")):
+                complex_in_partition.append(p)
+        if complex_in_partition:
+            raise ValueError(f"partições não podem ser complexas: {complex_in_partition}")
         return parts
 
     @property
@@ -104,6 +120,40 @@ class TableContract(BaseModel):
         if "ingestion_date" not in unique:
             unique.append("ingestion_date")
         return unique
+
+# ------------ helpers de dtype ------------
+
+def _parse_dtype(dtype_str: str) -> DataType:
+    """
+    Aceita:
+      - aliases atômicos (SUPPORTED_DTYPES)
+      - decimal(precision,scale)
+      - DDL Spark para complexos: array<...>, map<...>, struct<...>
+    Fallback: StringType
+    """
+    s = dtype_str.strip().lower()
+
+    # aliases atômicos
+    if s in SUPPORTED_DTYPES:
+        return SUPPORTED_DTYPES[s]()
+
+    # decimal(p,s)
+    if s.startswith("decimal"):
+        m = re.match(r"decimal\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", s)
+        if m:
+            return DecimalType(int(m.group(1)), int(m.group(2)))
+
+    # DDL complexa
+    if _parse_ddl_type is not None:
+        try:
+            return _parse_ddl_type(dtype_str)
+        except Exception:
+            pass  # cai no fallback silencioso
+
+    # fallback hard: string
+    return StringType()
+
+# ------------ manager ------------
 
 class DataContractManager:
     def __init__(self, contract: Union[dict, str, TableContract]):
@@ -132,38 +182,32 @@ class DataContractManager:
     @property
     def column_names(self) -> List[str]: return [c.name for c in self._model.columns]
 
-    # 🔎 NOVO: comentários de coluna a partir do contrato
+    # comentários de coluna a partir do contrato (+ auditoria)
     def column_comments(self) -> Dict[str, str]:
         out: Dict[str, str] = {}
         for c in self._model.columns:
             if c.comment and c.comment.strip():
                 out[c.name] = c.comment.strip()
-        
         out.setdefault("ingestion_ts", "Ingestion timestamp (UTC)")
         out.setdefault("ingestion_date", "Ingestion date (UTC)")
         return out
 
+    # defaults de leitura por formato
     def _default_reader_options(self, fmt: str) -> Dict[str, Any]:
         if fmt == "csv": return {"header": True, "delimiter": ",", "nullValue": ""}
         if fmt == "json": return {"multiline": False}
-        if fmt == "txt":  return {"header": False}
+        if fmt == "txt":  return {"header": False}  # txt -> csv + delimiter obrigatório
         return {}
 
+    # schema Spark (agora com suporte a complexos)
     def spark_schema_typed(self) -> StructType:
         fields = []
         for c in self._model.columns:
-            dt = c.dtype
-            if dt.startswith("decimal"):
-                m = re.match(r"decimal\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", dt)
-                if not m:
-                    raise ValueError(f"dtype inválido em {c.name}: {dt}")
-                p, s = int(m.group(1)), int(m.group(2))
-                fields.append(StructField(c.name, DecimalType(p, s), True))
-                continue
-            typ = SUPPORTED_DTYPES.get(dt, StringType)
-            fields.append(StructField(c.name, typ(), True))
+            dt = _parse_dtype(c.dtype)
+            fields.append(StructField(c.name, dt, True))
         return StructType(fields)
 
+    # formato/reader do Autoloader
     def reader_kind(self) -> str:
         fmt = self._model.source.format
         return "csv" if fmt == "txt" else fmt
@@ -175,6 +219,7 @@ class DataContractManager:
             raise ValueError("Para 'txt', options.delimiter é obrigatório.")
         return merged
 
+    # payload p/ ingestion
     def as_ingestion_payload(self) -> Dict[str, Any]:
         return {
             "fqn": self.fqn,
@@ -182,5 +227,5 @@ class DataContractManager:
             "format": self.reader_kind(),
             "reader_options": self.reader_options(),
             "partitions": self.effective_partitions,
-            "column_comments": self.column_comments(),  
+            "column_comments": self.column_comments(),
         }

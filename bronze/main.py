@@ -15,7 +15,7 @@ Comportamento:
       RAW:     contêiner raiz (sem subpastas)  -> monitorado pelo Auto Loader
       BRONZE:  LOCATION da tabela e checkpoint
   - Garante a tabela (LOCATION + TBLPROPERTIES) sempre antes de ingerir
-  - Usa dtypes do contrato (fallback string)
+  - Usa dtypes do contrato (agora com complexos)
   - Particiona fisicamente: [partições_do_usuário..., ingestion_date]
   - D-1 por padrão: trigger=availableNow, includeExistingFiles=True
 """
@@ -35,13 +35,14 @@ from ingestors.factory import IngestorFactory
 sys.path.append(os.getcwd())
 
 # ---------------------------------------------------------------------------
-# HARD-CODED roots 
+# HARD-CODED roots
 # ---------------------------------------------------------------------------
 BASE_LOCATIONS = {
     "raw":    "abfss://raw@medalforgestorage.dfs.core.windows.net",
     "bronze": "abfss://bronze@medalforgestorage.dfs.core.windows.net"
 }
 
+# ---------------------------------------------------------------------------
 
 def _parse_args() -> Dict[str, Any]:
     import argparse
@@ -95,7 +96,7 @@ def _build_paths(catalog: str, schema: str, table: str, reprocess_label: Optiona
 def _ensure_table(
     spark: SparkSession,
     mgr: DataContractManager,
-    schema_struct,                 
+    schema_struct,
     partitions: list[str],
     table_location: str
 ) -> None:
@@ -105,14 +106,18 @@ def _ensure_table(
         schema=mgr.schema,
         table=mgr.table,
         location=table_location,
-        schema_struct=schema_struct,     
+        schema_struct=schema_struct,
         partitions=partitions,
         comment="Bronze table (LOCATION hard-coded; contract-managed)",
-        column_comments=mgr.column_comments(),
+        column_comments=mgr.column_comments(),  
     )
 
-def _plan_dict(mgr: DataContractManager, payload: Dict[str, Any], paths: Dict[str, str],
-               trigger: str, include_existing: bool) -> Dict[str, Any]:
+def _plan_dict(
+    mgr: DataContractManager,
+    payload: Dict[str, Any],
+    paths: Dict[str, str],
+    include_existing: bool
+) -> Dict[str, Any]:
     """Monta um dicionário plano para impressão/log."""
     try:
         schema_repr = json.dumps(payload["schema_struct"].jsonValue())
@@ -125,7 +130,7 @@ def _plan_dict(mgr: DataContractManager, payload: Dict[str, Any], paths: Dict[st
         "reader_options": payload["reader_options"], # defaults ⊕ contrato
         "partitions": payload["partitions"],         # user..., ingestion_date
         "schema_struct": schema_repr,
-        "trigger": trigger,                          # availableNow (default)
+        "trigger": "availableNow",                   # fixo (D-1)
         "includeExistingFiles": include_existing,    # true (default)
         "source_directory": paths["source_directory"],      # RAW contêiner raiz
         "checkpointLocation": paths["checkpointLocation"],  # BRONZE
@@ -140,11 +145,10 @@ def main():
     with open(params["contract_path"], "r", encoding="utf-8") as f:
         raw = f.read()
     mgr = DataContractManager(raw)
-    payload = mgr.as_ingestion_payload()  # fqn, schema_struct, format, reader_options, partitions
+    payload = mgr.as_ingestion_payload()  # fqn, schema_struct, format, reader_options, partitions, column_comments
 
     # Normaliza modo e defaults D-1
     do_validate, do_plan, do_ingest = _normalize_mode(params.get("mode", "validate+plan"))
-    trigger = params.get("trigger_override") or "availableNow"
     include_existing = True if params.get("include_existing_override") is None else bool(params["include_existing_override"])
 
     # Deriva caminhos (RAW raiz, BRONZE location/ckpt)
@@ -154,7 +158,7 @@ def main():
     _ensure_table(
         spark=spark,
         mgr=mgr,
-        schema_struct=payload["schema_struct"],  
+        schema_struct=payload["schema_struct"],
         partitions=payload["partitions"],
         table_location=paths["table_location"],
     )
@@ -175,7 +179,7 @@ def main():
     # plan
     if do_plan:
         outputs["status"].append("planned")
-        outputs["details"]["plan"] = _plan_dict(mgr, payload, paths, trigger, include_existing)
+        outputs["details"]["plan"] = _plan_dict(mgr, payload, paths, include_existing)
 
     # ingest
     if do_ingest:
@@ -190,6 +194,7 @@ def main():
                 source_directory=paths["source_directory"],
                 checkpoint_location=paths["checkpointLocation"],
             )
+            # gatilho sempre availableNow nos ingestors
             ingestor.ingest(include_existing_files=include_existing)
             outputs["status"].append("ingested")
             outputs["details"]["ingest"] = {
