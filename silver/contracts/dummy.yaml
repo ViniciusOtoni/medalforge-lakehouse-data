@@ -1,7 +1,7 @@
 version: "1.0"
 
 source:
-  bronze_table: "bronze.sales_new.sales_bronze_teste"
+  bronze_table: "bronze.sales_new.orders"
 
 target:
   catalog: "silver"
