@@ -35,7 +35,7 @@ dqx:
       check:
         function: is_unique
         arguments:
-          column: ["id"]
+          columns: ["id"]   # canonical
 
     - name: amount_range
       criticality: error
@@ -43,8 +43,8 @@ dqx:
         function: is_in_range
         arguments:
           column: "amount"
-          min_limit: 0          # use int; se precisar decimal, passe como string, ex: "0.01"
-          max_limit: 100000     # idem: "100000.0"
+          min_limit: 0
+          max_limit: 100000
 
   custom:
     - name: created_at_valid_date
@@ -87,7 +87,7 @@ quarantine:
           - "MM/dd/yyyy"
           - "d/M/yyyy"
           - "dd/MM/yyyy"
-          - "yyyy-MM-dd"  
+          - "yyyy-MM-dd"
           - "MM-dd-yyyy"
           - "M-d-yyyy"
         to_format: "yyyy-MM-dd"
@@ -111,11 +111,10 @@ customs:
       module: "customs.sales_rules"
       method: "apply_discount_if_high_value"
       args_schema:
-        percent:   { type: number, min: 0, max: 50 }
-        threshold: { type: number, min: 0 }
+        percent:   { type: number, min: 0, max: 50, coerce: true, required: true }
+        threshold: { type: number, min: 0, default: 1000, coerce: true, required: false }
   use_in:
     - stage: "standard"
       method: "my_custom_discount"
       args:
-        percent: 5.0
-        threshold: 1000.0
+        percent: "5"   # string -> será convertido p/ número (coerce); threshold usa default=1000

@@ -1,30 +1,31 @@
+"""
+Interfaces base para ingestors (Bronze / Auto Loader + UC).
+Define o contrato mínimo e marcadores por tipo de dado.
+"""
+
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Any, Dict, List
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 
+
 class DataIngestor(ABC):
     """
-    Interface base para ingestão na Bronze (Databricks + UC).
+    Contrato base para ingestão em tabela Delta do Unity Catalog.
 
-    Intuito:
-        Padronizar a ingestão com Auto Loader lendo do RAW e gravando em
-        uma tabela Delta (Unity Catalog), com particionamento físico.
+    Propósito
+    - Padronizar leitura via Auto Loader a partir de um diretório fonte
+      e escrita em tabela UC (com particionamento físico opcional).
 
-    SOLID:
-        - SRP: define apenas o contrato; sem DQ/transformações/criação de tabela.
-        - ISP: implementações concretas expõem só o que precisam.
-        - DIP: orquestrador depende desta abstração, não de classes concretas.
-
-    Args:
-        spark: SparkSession ativa.
-        fqn: nome totalmente qualificado da tabela UC (ex.: "bronze.sales.orders_raw").
-        schema_struct: StructType tipado a partir do contrato (dtype faltante => string).
-        partitions: lista de colunas para particionamento físico (sempre inclui 'ingestion_date').
-        reader_options: opções específicas do leitor (header, delimiter, multiline, nullValue…).
-        source_directory: diretório RAW a ser monitorado pelo Auto Loader (derivado no runner).
-        checkpoint_location: caminho do checkpoint (no BRONZE) para esta tabela.
+    Atributos esperados
+    - spark: SparkSession ativa.
+    - fqn: nome da tabela alvo totalmente qualificado (catalog.schema.table).
+    - schema_struct: StructType esperado na leitura.
+    - partitions: lista de colunas de particionamento.
+    - reader_options: opções do leitor (header, delimiter, multiline, nullValue...).
+    - source_directory: diretório/prefixo de origem (RAW).
+    - checkpoint_location: caminho de checkpoint do stream.
     """
 
     def __init__(
@@ -33,17 +34,32 @@ class DataIngestor(ABC):
         fqn: str,
         schema_struct: StructType,
         partitions: List[str],
-        reader_options: Dict[str, object],
+        reader_options: Dict[str, Any],
         source_directory: str,
         checkpoint_location: str,
-    ):
-        self.spark = spark
-        self.fqn = fqn
-        self.schema_struct = schema_struct
-        self.partitions = partitions or []
-        self.reader_options = reader_options or {}
-        self.source_directory = source_directory
-        self.checkpoint_location = checkpoint_location
+    ) -> None:
+        """
+        Inicializa o ingestor com dependências e parâmetros de execução.
+
+        Parâmetros
+        - spark: sessão Spark.
+        - fqn: tabela alvo (catalog.schema.table).
+        - schema_struct: schema esperado na leitura.
+        - partitions: colunas de particionamento físico.
+        - reader_options: opções do leitor por formato.
+        - source_directory: diretório/prefixo de origem (RAW).
+        - checkpoint_location: caminho do checkpoint do stream.
+
+        Retorno
+        - None
+        """
+        self.spark: SparkSession = spark
+        self.fqn: str = fqn
+        self.schema_struct: StructType = schema_struct
+        self.partitions: List[str] = partitions or []
+        self.reader_options: Dict[str, Any] = reader_options or {}
+        self.source_directory: str = source_directory
+        self.checkpoint_location: str = checkpoint_location
 
     @abstractmethod
     def ingest(
@@ -52,11 +68,18 @@ class DataIngestor(ABC):
         include_existing_files: bool = True,
     ) -> None:
         """
-        Executa a ingestão com Auto Loader.
+        Executa a ingestão via Auto Loader.
 
-        Args:
-            trigger: 'availableNow' (default D-1) ou 'processingTime:<intervalo>'.
-            include_existing_files: se True, processa backlog + novos arquivos.
+        Parâmetros
+        - trigger: "availableNow" (processa backlog e finaliza)
+                   ou "processingTime:<intervalo>" (ex.: "processingTime=5 minutes").
+        - include_existing_files: se True, processa arquivos já existentes + novos.
+
+        Retorno
+        - None
+
+        Exceptions
+        - Pode propagar exceções do Spark (leitura/escrita/stream).
         """
         raise NotImplementedError
 
@@ -72,5 +95,5 @@ class SemiStructuredDataIngestor(DataIngestor, ABC):
 
 
 class UnstructuredDataIngestor(DataIngestor, ABC):
-    """Marcador para dados não estruturados (ex.: binaryFile / texto livre)."""
+    """Marcador para dados não estruturados (ex.: texto livre, binários)."""
     pass

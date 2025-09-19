@@ -15,7 +15,7 @@ Comportamento:
       RAW:     contêiner raiz (sem subpastas)  -> monitorado pelo Auto Loader
       BRONZE:  LOCATION da tabela e checkpoint
   - Garante a tabela (LOCATION + TBLPROPERTIES) sempre antes de ingerir
-  - Usa dtypes do contrato (agora com complexos)
+  - Usa dtypes do contrato (inclusive complexos)
   - Particiona fisicamente: [partições_do_usuário..., ingestion_date]
   - D-1 por padrão: trigger=availableNow, includeExistingFiles=True
 """
@@ -32,6 +32,7 @@ from managers.data_contract_manager import DataContractManager
 from managers.table_manager import TableManager
 from ingestors.factory import IngestorFactory
 
+
 sys.path.append(os.getcwd())
 
 # ---------------------------------------------------------------------------
@@ -39,29 +40,53 @@ sys.path.append(os.getcwd())
 # ---------------------------------------------------------------------------
 BASE_LOCATIONS = {
     "raw":    "abfss://raw@medalforgestorage.dfs.core.windows.net",
-    "bronze": "abfss://bronze@medalforgestorage.dfs.core.windows.net"
+    "bronze": "abfss://bronze@medalforgestorage.dfs.core.windows.net",
 }
 
 # ---------------------------------------------------------------------------
 
 def _parse_args() -> Dict[str, Any]:
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--contract_path", required=True)
-    ap.add_argument("--mode", default="validate+plan")
-    ap.add_argument("--reprocess_label", default=None)
-    ap.add_argument("--include_existing_override", default=None)  # "true" | "false"
-    args = ap.parse_args()
-    d = vars(args)
+    """
+    Lê os argumentos de CLI e normaliza tipos simples.
 
-    if d.get("include_existing_override") is not None:
-        d["include_existing_override"] = str(d["include_existing_override"]).lower() == "true"
-    return d
+    Retorna
+    -------
+    dict
+        {
+          "contract_path": str,
+          "mode": str,
+          "reprocess_label": Optional[str],
+          "include_existing_override": Optional[bool]  # "true"/"false" -> bool
+        }
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Runner Bronze (validate/plan/ingest)")
+    parser.add_argument("--contract_path", required=True, help="Caminho do contrato JSON (TableContract).")
+    parser.add_argument("--mode", default="validate+plan", help="Modo: validate|plan|ingest combináveis com '+'.")
+    parser.add_argument("--reprocess_label", default=None, help="Sufixo para isolar checkpoint (ex.: 'replay2024').")
+    parser.add_argument("--include_existing_override", default=None, help="'true'|'false' força leitura de backlog.")
+
+    args = parser.parse_args()
+    result = vars(args)
+
+    if result.get("include_existing_override") is not None:
+        result["include_existing_override"] = str(result["include_existing_override"]).lower() == "true"
+    return result
+
 
 def _normalize_mode(mode: str) -> Tuple[bool, bool, bool]:
     """
-    Retorna flags (do_validate, do_plan, do_ingest) a partir de 'mode'.
-    Suporta combinações separadas por '+' ou ','.
+    Converte a string do modo em flags de execução.
+
+    Parâmetros
+    ----------
+    mode : str
+        Ex.: "validate+plan", "ingest", "validate+ingest", etc.
+
+    Retorna
+    -------
+    (do_validate, do_plan, do_ingest) : tuple[bool, bool, bool]
     """
     tokens = {t.strip().lower() for t in mode.replace(",", "+").split("+") if t.strip()}
     do_validate = "validate" in tokens
@@ -71,9 +96,31 @@ def _normalize_mode(mode: str) -> Tuple[bool, bool, bool]:
         return True, True, False
     return do_validate, do_plan, do_ingest
 
+
 def _build_paths(catalog: str, schema: str, table: str, reprocess_label: Optional[str]) -> Dict[str, str]:
     """
-    Deriva RAW (raiz do contêiner), LOCATION (bronze) e checkpoint (bronze).
+    Deriva diretórios de origem (RAW), LOCATION e checkpoint (BRONZE).
+
+    Parâmetros
+    ----------
+    catalog, schema, table : str
+        Identificadores UC.
+    reprocess_label : Optional[str]
+        Sufixo opcional para isolar o checkpoint (reprocessamentos).
+
+    Retorna
+    -------
+    dict
+        {
+          "source_directory": RAW root (str),
+          "table_location":   BRONZE location (str),
+          "checkpointLocation": BRONZE checkpoint (str)
+        }
+
+    Raises
+    ------
+    ValueError
+        Se BASE_LOCATIONS não contiver chaves 'raw' e 'bronze'.
     """
     if "raw" not in BASE_LOCATIONS or "bronze" not in BASE_LOCATIONS:
         raise ValueError("BASE_LOCATIONS deve conter 'raw' e 'bronze' configurados.")
@@ -93,14 +140,31 @@ def _build_paths(catalog: str, schema: str, table: str, reprocess_label: Optiona
         checkpointLocation=checkpoint,
     )
 
+
 def _ensure_table(
     spark: SparkSession,
     mgr: DataContractManager,
     schema_struct,
     partitions: list[str],
-    table_location: str
+    table_location: str,
 ) -> None:
-    tm = TableManager(spark)
+    """
+    Garante a tabela EXTERNA no UC (idempotente) antes da ingestão.
+
+    Parâmetros
+    ----------
+    spark : SparkSession
+        Sessão Spark para emitir DDL.
+    mgr : DataContractManager
+        Fornece catalog/schema/table e comentários de coluna.
+    schema_struct : StructType
+        Schema base da tabela (contrato).
+    partitions : list[str]
+        Colunas de particionamento físico.
+    table_location : str
+        LOCATION externo (abfss://...).
+    """
+    tm = TableManager(spark=spark)
     tm.ensure_external_table(
         catalog=mgr.catalog,
         schema=mgr.schema,
@@ -109,18 +173,26 @@ def _ensure_table(
         schema_struct=schema_struct,
         partitions=partitions,
         comment="Bronze table (LOCATION hard-coded; contract-managed)",
-        column_comments=mgr.column_comments(),  
+        column_comments=mgr.column_comments(),
     )
+
 
 def _plan_dict(
     mgr: DataContractManager,
     payload: Dict[str, Any],
     paths: Dict[str, str],
-    include_existing: bool
+    include_existing: bool,
 ) -> Dict[str, Any]:
-    """Monta um dicionário plano para impressão/log."""
+    """
+    Monta um dicionário plano com o plano de execução (para log/impressão).
+
+    Retorna
+    -------
+    dict
+        Campos principais do plano (formato, opções do leitor, partições, schema, etc.).
+    """
     try:
-        schema_repr = json.dumps(payload["schema_struct"].jsonValue())
+        schema_repr = json.dumps(obj=payload["schema_struct"].jsonValue())
     except Exception:
         schema_repr = str(payload["schema_struct"])
 
@@ -137,22 +209,45 @@ def _plan_dict(
         "table_location": paths["table_location"],          # BRONZE
     }
 
-def main():
+
+def main() -> None:
+    """
+    Ponto de entrada do runner Bronze.
+
+    Fluxo
+    - Carrega contrato.
+    - Normaliza modo/flags.
+    - Deriva caminhos.
+    - Garante tabela.
+    - (Opcional) validate/plan.
+    - (Opcional) ingest.
+
+    Saída
+    - Imprime um JSON com 'status' e 'details'.
+    """
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     params = _parse_args()
 
     # Carrega e valida contrato
     with open(params["contract_path"], "r", encoding="utf-8") as f:
         raw = f.read()
-    mgr = DataContractManager(raw)
-    payload = mgr.as_ingestion_payload()  # fqn, schema_struct, format, reader_options, partitions, column_comments
+    mgr = DataContractManager(contract=raw)
+    # fqn, schema_struct, format, reader_options, partitions, column_comments
+    payload = mgr.as_ingestion_payload()
 
     # Normaliza modo e defaults D-1
-    do_validate, do_plan, do_ingest = _normalize_mode(params.get("mode", "validate+plan"))
-    include_existing = True if params.get("include_existing_override") is None else bool(params["include_existing_override"])
+    do_validate, do_plan, do_ingest = _normalize_mode(mode=params.get("mode", "validate+plan"))
+    include_existing = True if params.get("include_existing_override") is None else bool(
+        params["include_existing_override"]
+    )
 
     # Deriva caminhos (RAW raiz, BRONZE location/ckpt)
-    paths = _build_paths(mgr.catalog, mgr.schema, mgr.table, params.get("reprocess_label"))
+    paths = _build_paths(
+        catalog=mgr.catalog,
+        schema=mgr.schema,
+        table=mgr.table,
+        reprocess_label=params.get("reprocess_label"),
+    )
 
     # Sempre garante a tabela antes de qualquer ingestão
     _ensure_table(
@@ -173,22 +268,30 @@ def main():
             "columns": mgr.column_names,
             "partitions_effective": mgr.effective_partitions,
             "format": payload["format"],
-            "reader_options_merged": DataContractManager(mgr._model.dict()).reader_options(),  # mostra merge
+       
+            "reader_options_merged": DataContractManager(
+                contract=mgr._model.dict()
+            ).reader_options(),
         }
 
     # plan
     if do_plan:
         outputs["status"].append("planned")
-        outputs["details"]["plan"] = _plan_dict(mgr, payload, paths, include_existing)
+        outputs["details"]["plan"] = _plan_dict(
+            mgr=mgr,
+            payload=payload,
+            paths=paths,
+            include_existing=include_existing,
+        )
 
     # ingest
     if do_ingest:
         try:
             ingestor = IngestorFactory.create(
-                fmt=payload["format"],
+                data_format=payload["format"],          
                 spark=spark,
-                fqn=payload["fqn"],
-                schema_struct=payload["schema_struct"],
+                target_table_fqn=payload["fqn"],
+                schema=payload["schema_struct"],
                 partitions=payload["partitions"],
                 reader_options=payload["reader_options"],
                 source_directory=paths["source_directory"],
@@ -207,7 +310,8 @@ def main():
 
     if not outputs["status"]:
         outputs["status"] = ["noop"]
-    print(json.dumps(outputs, ensure_ascii=False, indent=2))
+    print(json.dumps(obj=outputs, ensure_ascii=False, indent=2))
+
 
 if __name__ == "__main__":
     main()
