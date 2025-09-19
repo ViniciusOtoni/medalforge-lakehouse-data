@@ -13,6 +13,6 @@
   "partitions": ["created_at"],
   "source": {
     "format": "json",
-    "options": { "multiline": false }
+    "options": { "multiline": true }
   }
 }

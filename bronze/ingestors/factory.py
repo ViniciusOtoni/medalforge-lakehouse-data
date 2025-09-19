@@ -1,5 +1,6 @@
+# ingestors/factory.py
 from __future__ import annotations
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Type
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 
@@ -7,11 +8,32 @@ from ingestors.ingestors import CSVIngestor, JSONIngestor, TextIngestor
 
 class IngestorFactory:
     """
-    Factory para criação de instâncias concretas de ingestor com base no formato.
+    Cria instâncias de ingestors a partir de um formato, via mapa de registro.
+    - Case-insensitive
+    - Extensível via register()
     """
 
-    @staticmethod
+    # formato -> classe
+    _REGISTRY: Dict[str, Type] = {
+        "csv": CSVIngestor,
+        "json": JSONIngestor,
+        "txt": TextIngestor,
+        "text": TextIngestor,
+    }
+
+    @classmethod
+    def register(cls, fmt: str, ingestor_cls: Type) -> None:
+        """
+        Registra/override de um formato para uma classe de ingestor.
+        Ex.: IngestorFactory.register("parquet", ParquetIngestor)
+        """
+        if not isinstance(fmt, str) or not fmt.strip():
+            raise ValueError("fmt deve ser string não vazia")
+        cls._REGISTRY[fmt.strip().lower()] = ingestor_cls
+
+    @classmethod
     def create(
+        cls,
         fmt: str,
         spark: SparkSession,
         fqn: str,
@@ -21,17 +43,13 @@ class IngestorFactory:
         source_directory: str,
         checkpoint_location: str,
     ):
-        fmt = (fmt or "").lower()
-        if fmt == "csv":
-            cls = CSVIngestor
-        elif fmt == "json":
-            cls = JSONIngestor
-        elif fmt == "txt":
-            # TXT delimitado é tratado como CSV sob o capô
-            cls = TextIngestor
-        else:
-            raise ValueError(f"Formato não suportado para ingestor: '{fmt}'")
-        return cls(
+        key = (fmt or "").strip().lower()
+        ingestor_cls = cls._REGISTRY.get(key)
+        if ingestor_cls is None:
+            known = ", ".join(sorted(cls._REGISTRY.keys()))
+            raise TypeError(f"Formato inválido '{fmt}'. Suportados: {known}")
+
+        return ingestor_cls(
             spark=spark,
             fqn=fqn,
             schema_struct=schema_struct,
