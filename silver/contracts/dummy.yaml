@@ -59,7 +59,7 @@ etl:
   standard:
     - method: trim_columns
       args:
-        columns: ["customer_id"]
+        columns: ["id"]
 
     - method: normalize_dates
       args:
