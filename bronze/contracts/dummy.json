@@ -2,17 +2,17 @@
   "version": "1.0",
   "catalog": "bronze",
   "schema": "sales_new",
-  "table": "sales_bronze_teste",
+  "table": "orders",
   "columns": [
-    { "name": "id",          "dtype": "string",    "comment": "Order ID" },
-    { "name": "customer_id", "dtype": "string",    "comment": "Customer ID"  },
-    { "name": "created_at",  "dtype": "string",    "comment": "Order Creation Time" },
-    { "name": "amount",      "dtype": "double",    "comment": "Order Amount"  }
+    { "name": "id",          "dtype": "string",  "comment": "Order ID" },
+    { "name": "created_at",  "dtype": "timestamp", "comment": "Creation time" },
+    { "name": "amount",      "dtype": "decimal(18,2)", "comment": "Total amount" },
+    { "name": "tags",        "dtype": "array<string>", "comment": "Labels for the order" },
+    { "name": "meta",        "dtype": "struct<source:string, ts:timestamp>", "comment": "Metadata" }
   ],
   "partitions": ["created_at"],
   "source": {
-    "format": "csv",
-    "options": { "header": true, "delimiter": ",", "nullValue": "" }
+    "format": "json",
+    "options": { "multiline": false }
   }
 }
-
