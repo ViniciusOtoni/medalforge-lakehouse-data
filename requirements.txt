@@ -1,0 +1,6 @@
+pyspark==3.5.*          # compatível com DBR 14.3 LTS
+pydantic>=2,<3          
+databricks-labs-dqx==0.8.0
+
+pytest>=7,<9
+pytest-cov>=4,<6

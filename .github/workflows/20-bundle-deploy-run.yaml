@@ -21,6 +21,54 @@ permissions:
   id-token: write
 
 jobs:
+  tests:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # Java (PySpark precisa de JDK/JRE)
+      - name: Set up Java (for PySpark)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "11"
+
+      # Cache do pip
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # Instala dependências
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+         
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      # Executa testes
+      - name: Run tests (unit + integration)
+        run: |
+          set -euo pipefail
+          pytest -q \
+            --maxfail=1 \
+            --disable-warnings \
+            --cov=. --cov-report=term-missing \
+            tests/unit tests/integration
+
   deploy_and_run:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
