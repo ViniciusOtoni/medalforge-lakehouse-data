@@ -1,193 +1,170 @@
 """
 Testes unitários dos ingestors (CSV/JSON/TEXT) com mocks do Auto Loader.
 
+Relação com código sob teste
+----------------------------
+Este arquivo valida o módulo: bronze/ingestors/ingestors.py
+- CSVIngestor.ingest
+- JSONIngestor.ingest
+- TextIngestor.ingest
+
 Intuito
 -------
-Validar o encadeamento de chamadas de leitura/escrita (readStream → option/schema/load → 
-writeStream → toTable) sem acionar o Auto Loader real – apenas verificando fluxos felizes 
-e erros de validação.
+Verificar o encadeamento de chamadas do Auto Loader (readStream → format/option/schema/load →
+withColumn* → writeStream → toTable) sem acionar streaming real.
 
-Escopo
-------
-- Exercita CSVIngestor, JSONIngestor e TextIngestor.
-- Usa um DataFrame real (fixture `sample_df`) acoplado a um `writeStream` mockado.
+Estratégia de mock
+------------------
+- `SparkSession.readStream` é uma @property; por isso, o patch é feito **na classe**
+  substituindo-a por uma property que retorna nosso `_DummyRead`.
+- `_DummyRead.load()` retorna um proxy de DF com:
+    * `writeStream` → `_DummyWrite` (mock do DataStreamWriter)
+    * `withColumn(...)` que mantém o encadeamento retornando o próprio proxy
+- Assim, todo o fluxo feliz é exercitado, mas nada roda de verdade.
 """
 
-from types import SimpleNamespace
+from __future__ import annotations
 from typing import Any, Dict
 import pytest
+from types import SimpleNamespace
+from pyspark.sql import SparkSession
+
 from bronze.ingestors.ingestors import CSVIngestor, JSONIngestor, TextIngestor
 
 
+# -------------------- Dummies / Proxies --------------------
+
 class _DummyWrite:
     """
-    Mock minimalista de DataStreamWriter (API encadeável).
+    Mock do DataStreamWriter com API encadeável mínima.
 
     Propósito
     ---------
-    Capturar opções passadas pelo ingestor e interceptar `toTable` sem escrever de verdade.
+    Capturar parâmetros e interceptar `toTable` sem I/O real.
 
     Atributos
     ---------
     opts : Dict[str, Any]
-        Armazena opções e metadados (ex.: partitionBy, tableName).
-
-    Métodos encadeáveis relevantes
-    ------------------------------
-    - format(source: str) -> _DummyWrite
-    - option(key: str, value: Any) -> _DummyWrite
-    - outputMode(outputMode: str) -> _DummyWrite
-    - trigger(availableNow: bool = False, **_) -> _DummyWrite
-    - partitionBy(*cols: str) -> _DummyWrite
-    - toTable(tableName: str) -> None
+        Dicionário de opções/flags (ex.: checkpointLocation, partitionBy, tableName).
     """
-
     def __init__(self) -> None:
         self.opts: Dict[str, Any] = {}
 
-    def format(self, source: str):
+    def format(self, source: str) -> "_DummyWrite":
         self.opts["format"] = source
         return self
 
-    def option(self, key: str, value: Any):
+    def option(self, key: str, value: Any) -> "_DummyWrite":
         self.opts[key] = value
         return self
 
-    def outputMode(self, outputMode: str):
+    def outputMode(self, outputMode: str) -> "_DummyWrite":
         self.opts["outputMode"] = outputMode
         return self
 
-    def trigger(self, availableNow: bool = False, **_: Any):
+    def trigger(self, availableNow: bool = False, **_: Any) -> "_DummyWrite":
         self.opts["trigger.availableNow"] = availableNow
         return self
 
-    def partitionBy(self, *cols: str):
+    def partitionBy(self, *cols: str) -> "_DummyWrite":
         self.opts["partitionBy"] = cols
         return self
 
     def toTable(self, tableName: str) -> None:
         """
-        Simula o sink para tabela Delta.
+        Simula a chamada final de sink para Delta.
 
         Parâmetros
         ----------
         tableName : str
-            Nome totalmente qualificado da tabela de destino.
-
-        Retorno
-        -------
-        None
+            Tabela alvo totalmente qualificada.
         """
         self.opts["tableName"] = tableName
+        # nada a fazer (sem I/O)
+
+
+class _DFProxy:
+    """
+    Proxy que emula um DataFrame de streaming apenas o suficiente
+    para a cadeia `withColumn(...).withColumn(...).writeStream...`.
+    """
+    def __init__(self) -> None:
+        self.writeStream = _DummyWrite()
+
+    def withColumn(self, *_: Any, **__: Any) -> "_DFProxy":
+        # mantém encadeamento sempre retornando o próprio proxy
+        return self
 
 
 class _DummyRead:
     """
-    Mock minimalista de DataStreamReader (API encadeável).
-
-    Propósito
-    ---------
-    Emular a sequência `format/option/schema/load` do Auto Loader e devolver
-    um “DataFrame” com atributo `writeStream` mockado.
+    Mock do DataStreamReader (Auto Loader) com API encadeável.
 
     Atributos
     ---------
-    df : Any
-        DataFrame real (fixture `sample_df`) para encadear transforms de forma inofensiva.
     opts : Dict[str, Any]
-        Opções passadas ao reader (para inspeção se necessário).
+        Opções passadas via `.option(...)`.
     fmt : str | None
-        Formato solicitado (ex.: "cloudFiles").
-
-    Métodos relevantes
-    ------------------
-    - format(source: str) -> _DummyRead
-    - option(key: str, value: Any) -> _DummyRead
-    - schema(schema: Any) -> _DummyRead
-    - load(path: str) -> SimpleNamespace(writeStream=_DummyWrite(), withColumn=...)
+        Formato do reader (ex.: "cloudFiles").
     """
-
-    def __init__(self, df: Any) -> None:
-        self.df = df
+    def __init__(self) -> None:
         self.opts: Dict[str, Any] = {}
         self.fmt: str | None = None
 
-    def format(self, source: str):
+    def format(self, source: str) -> "_DummyRead":
         self.fmt = source
         return self
 
-    def option(self, key: str, value: Any):
+    def option(self, key: str, value: Any) -> "_DummyRead":
         self.opts[key] = value
         return self
 
-    def schema(self, schema: Any):
-        # Apenas armazena se quiser inspecionar depois
+    def schema(self, schema: Any) -> "_DummyRead":
+        # marca que schema foi definido (útil para debug, se quiser inspecionar)
         self.opts["schema.set"] = True
         return self
 
-    def load(self, path: str) -> SimpleNamespace:
-        """
-        Simula a leitura do diretório de origem.
+    def load(self, path: str) -> _DFProxy:
+        # devolve o proxy de DF (com writeStream mock e withColumn encadeável)
+        return _DFProxy()
 
-        Parâmetros
-        ----------
-        path : str
-            Caminho de origem (ignorado para o mock).
 
-        Retorno
-        -------
-        SimpleNamespace
-            Objeto com:
-              - writeStream: _DummyWrite()
-              - withColumn: lambda que retorna o `df` real (permite encadear).
-        """
-        return SimpleNamespace(
-            writeStream=_DummyWrite(),
-            withColumn=lambda *a, **k: self.df,
-        )
-
+# -------------------- Fixtures --------------------
 
 @pytest.fixture
-def patch_streams(monkeypatch: pytest.MonkeyPatch, spark, sample_df):
+def patch_streams(monkeypatch: pytest.MonkeyPatch, spark):
     """
-    Fixture
-    -------
-    Substitui `spark.readStream` por `_DummyRead(sample_df)`, acoplando `writeStream`
-    falso ao DataFrame real de exemplo.
+    Substitui `SparkSession.readStream` (property) por outra property
+    que devolve `_DummyRead()`.
 
-    Parâmetros
-    ----------
-    monkeypatch : pytest.MonkeyPatch
-        Utilitário do pytest para sobrescrever atributos temporariamente.
-    spark : SparkSession
-        Sessão Spark da suíte de testes.
-    sample_df : DataFrame
-        DataFrame real (fixture) usado como base para encadeamento.
+    Por que na classe?
+    ------------------
+    `readStream` é uma @property; trocar na instância falha com
+    "AttributeError: can't set attribute". Por isso o patch é aplicado
+    em `SparkSession` diretamente, com `raising=True` para restaurar no teardown.
 
     Retorno
     -------
     SparkSession
-        A mesma sessão Spark, porém com `readStream` monkeypatched.
+        A mesma sessão Spark já com o mock ativo.
     """
-    monkeypatch.setattr(spark, "readStream", _DummyRead(sample_df))
+    mock_prop = property(lambda self: _DummyRead())
+    monkeypatch.setattr(SparkSession, "readStream", mock_prop, raising=True)
     return spark
 
 
 def _build_ingestor(Cls, spark):
     """
-    Helper para instanciar ingestors com parâmetros nomeados de forma consistente.
+    Helper: instancia ingestors com parâmetros padrão de teste.
 
     Parâmetros
     ----------
-    Cls : type
-        Classe do ingestor (CSVIngestor | JSONIngestor | TextIngestor).
+    Cls : type[CSVIngestor|JSONIngestor|TextIngestor]
     spark : SparkSession
-        Sessão Spark.
 
     Retorno
     -------
-    DataIngestor
-        Instância inicializada com fqn/partitions/options/paths padrões de teste.
+    Instância do ingestor indicado.
     """
     return Cls(
         spark=spark,
@@ -200,38 +177,27 @@ def _build_ingestor(Cls, spark):
     )
 
 
+# -------------------- Testes --------------------
+
 def test_csv_ingestor_calls_read_write_ok(patch_streams):
     """
-    CSVIngestor: verifica o fluxo feliz de leitura e escrita.
+    CSVIngestor: fluxo feliz com trigger=availableNow, mergeSchema e toTable.
 
-    Intuito
-    -------
-    Exercitar:
-      - format=cloudFiles
-      - options cloudFiles.includeExistingFiles e cloudFiles.schemaLocation
-      - mergeSchema + checkpoint + availableNow
-      - partitionBy + toTable
-
-    Critério
+    Verifica
     --------
-    Não deve lançar exceção.
+    - Não lança exceção ao encadear Auto Loader + writeStream.
     """
     ing = _build_ingestor(CSVIngestor, patch_streams)
-    ing.ingest(include_existing_files=True)
+    ing.ingest(include_existing_files=True)  # apenas exercita o caminho feliz
 
 
 def test_json_ingestor_multiline_option_ok(patch_streams):
     """
-    JSONIngestor: aplica 'multiline' quando presente.
+    JSONIngestor: aplica 'multiline' quando presente e usa include_existing_files=False.
 
-    Intuito
-    -------
-    Verificar que a opção `multiline` é aceita e não causa erro no caminho
-    `include_existing_files=False`.
-
-    Critério
+    Verifica
     --------
-    Não deve lançar exceção.
+    - Não lança exceção.
     """
     ing = _build_ingestor(JSONIngestor, patch_streams)
     ing.reader_options["multiline"] = True
@@ -240,20 +206,16 @@ def test_json_ingestor_multiline_option_ok(patch_streams):
 
 def test_text_ingestor_requires_delimiter(patch_streams):
     """
-    TextIngestor: exige `reader_options["delimiter"]`.
+    TextIngestor: valida obrigatoriedade de `reader_options["delimiter"]`.
 
-    Intuito
-    -------
-    Garantir validação de pré-condição para TXT delimitado.
-
-    Critério
+    Cenários
     --------
-    - Sem delimiter → deve levantar ValueError.
-    - Com delimiter → execução segue sem exceção.
+    - Sem delimiter → `ValueError`
+    - Com delimiter → caminho feliz
     """
     ing = _build_ingestor(TextIngestor, patch_streams)
     with pytest.raises(ValueError):
-        ing.ingest()
+        ing.ingest()  # falta delimiter
 
     ing.reader_options["delimiter"] = "|"
-    ing.ingest()
+    ing.ingest()  # agora deve passar
