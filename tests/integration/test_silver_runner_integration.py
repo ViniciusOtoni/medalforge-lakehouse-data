@@ -33,6 +33,10 @@ def test_run_happy_path(monkeypatch, tmp_path, spark, sample_df):
 
     monkeypatch.setattr(silver_main.spark, "table", _tbl)
 
+    # **EVITA resolver namespace 3-part em catálogos locais (spark_catalog)**
+    # tableExists('silver.sales.t_clean') em Spark local pode falhar com 3-part.
+    monkeypatch.setattr(silver_main.spark.catalog, "tableExists", lambda *_a, **_k: True)
+
     # 2) mock DQX split → tudo válido, quarentena vazia
     def _split(df, _cfg):
         return df, df.limit(0)

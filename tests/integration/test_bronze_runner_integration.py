@@ -47,8 +47,8 @@ def test_bronze_runner_happy_path(monkeypatch, spark, tmp_path, capsys):
 
     # 2) patches
     # 2.1 TableManager.ensure_external_table -> no-op
-    
-    monkeypatch.setattr(tm_mod.TableManager, "ensure_external_table", lambda *a, **k: None)
+    #     IMPORTANTE: patch no símbolo referenciado por bronze_main (evita CREATE SCHEMA real)
+    monkeypatch.setattr(bronze_main.TableManager, "ensure_external_table", lambda *a, **k: None)
 
     # 2.2 Fake ingestor
     calls = {}
@@ -60,7 +60,7 @@ def test_bronze_runner_happy_path(monkeypatch, spark, tmp_path, capsys):
             calls["ingested"] = True
             calls["include_existing_files"] = include_existing_files
 
-    
+    # mantém a fábrica, mas troca o create para devolver o fake
     monkeypatch.setattr(factory_mod, "IngestorFactory", factory_mod.IngestorFactory)
     monkeypatch.setattr(
         factory_mod.IngestorFactory, "create",
@@ -68,7 +68,6 @@ def test_bronze_runner_happy_path(monkeypatch, spark, tmp_path, capsys):
     )
 
     # 3) simula CLI chamando main() com args: --mode validate+plan+ingest
-    
     argv_bkp = list(sys.argv)
     sys.argv = [
         argv_bkp[0],
