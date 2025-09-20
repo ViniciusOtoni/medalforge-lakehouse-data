@@ -67,8 +67,6 @@ def test_merge_upsert_with_mocks(monkeypatch):
         def write(self): return _Writer()
         def createOrReplaceTempView(self, name: str): pass
         def head(self, n=1): return [SimpleNamespace()] if self._has_rows else []
-        # usado em append_external
-        def write(self): return _Writer()
 
     # 1) DF vazio ⇒ não faz MERGE
     df_empty = _DF(["id", "v"], has_rows=False)

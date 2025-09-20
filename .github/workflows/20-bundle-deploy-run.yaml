@@ -69,8 +69,6 @@ jobs:
         run: |
           set -euo pipefail
           pytest -q \
-            --maxfail=1 \
-            --disable-warnings \
             --cov=. --cov-report=term-missing \
             tests/unit tests/integration
 
