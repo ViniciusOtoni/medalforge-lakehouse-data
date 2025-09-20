@@ -6,15 +6,13 @@ Fixtures compartilhadas:
 
 from __future__ import annotations
 import pytest
+import sys
+from pathlib import Path
 from pyspark.sql import SparkSession
 
-import sys
-import os
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+REPO_ROOT = Path(__file__).resolve().parents[1]  # sobe de tests/ para a raiz
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 @pytest.fixture(scope="session")
