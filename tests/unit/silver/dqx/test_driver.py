@@ -60,7 +60,12 @@ def test_apply_checks_split_with_mock(monkeypatch, spark, sample_df):
         ) -> Tuple[DataFrame, DataFrame]:
             return df, df.limit(0)
 
+    # **Evita autenticação real do Databricks SDK no CI**
+    monkeypatch.setattr(dqx_driver, "WorkspaceClient", lambda *a, **k: object())
+
+    # Engine DQX "fake"
     monkeypatch.setattr(dqx_driver, "DQEngine", lambda *_a, **_k: _DummyEngine())
+
     valid, quar = dqx_driver.apply_checks_split(sample_df, {"checks": [], "custom": []})
     assert isinstance(valid, DataFrame) and isinstance(quar, DataFrame)
     assert quar.count() == 0
