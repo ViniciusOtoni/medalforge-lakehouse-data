@@ -60,11 +60,13 @@ def test_bronze_runner_happy_path(monkeypatch, spark, tmp_path, capsys):
             calls["ingested"] = True
             calls["include_existing_files"] = include_existing_files
 
-    # mantém a fábrica, mas troca o create para devolver o fake
-    monkeypatch.setattr(factory_mod, "IngestorFactory", factory_mod.IngestorFactory)
+    
+    # não apenas no módulo factory_mod (senão o main segue usando a referência própria)
+    monkeypatch.setattr(bronze_main, "IngestorFactory", factory_mod.IngestorFactory, raising=True)
     monkeypatch.setattr(
-        factory_mod.IngestorFactory, "create",
-        lambda **kwargs: FakeIngestor(**kwargs)
+        bronze_main.IngestorFactory, "create",
+        lambda **kwargs: FakeIngestor(**kwargs),
+        raising=True,
     )
 
     # 3) simula CLI chamando main() com args: --mode validate+plan+ingest
