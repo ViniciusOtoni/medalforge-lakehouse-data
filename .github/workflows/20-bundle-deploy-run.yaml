@@ -98,7 +98,7 @@ jobs:
           echo "ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
           echo "ARM_USE_OIDC=true" >> $GITHUB_ENV
 
-      # 1) Buscar client_id/secret da SPN dinâmica no Key Vault (para ler o tfstate)
+      # 1) Buscar client_id/secret da SPN dinâmica no Key Vault (para ler o tfstate + DAB)
       - name: Fetch dynamic SPN creds from KV
         run: |
           set -euo pipefail
@@ -111,17 +111,12 @@ jobs:
           echo "DYN_SPN_ID=$SPN_ID"         >> $GITHUB_ENV
           echo "DYN_SPN_SECRET=$SPN_SECRET" >> $GITHUB_ENV
           echo "DYN_TENANT_ID=$TENANT_ID"   >> $GITHUB_ENV
-          # run_as do job no bundle:
-          echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
-
+        
       - name: Export SPN envs for monitoring (Azure Table)
         run: |
-          echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
-          echo "BUNDLE_VAR_tenant_id=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
-          echo "BUNDLE_VAR_client_secret=$SPN_SECRET" >> $GITHUB_ENV
-          echo "MON_TABLE_ACCOUNT=medalforgestorage" >> $GITHUB_ENV
-          echo "MON_TABLE_NAME=pipeline_runs" >> $GITHUB_ENV
-          echo "ENV=dev" >> $GITHUB_ENV
+          echo "BUNDLE_VAR_dynamic_spn_client_id=$DYN_SPN_ID" >> $GITHUB_ENV
+          echo "BUNDLE_VAR_tenant_id=$DYN_TENANT_ID" >> $GITHUB_ENV
+          echo "BUNDLE_VAR_client_secret=$DYN_SPN_SECRET" >> $GITHUB_ENV
 
       # 2) Loga como SPN dinâmica e lê workspace_id do tfstate -> DATABRICKS_AZURE_RESOURCE_ID
       - name: Read workspace_id from remote tfstate (dynamic SPN)
