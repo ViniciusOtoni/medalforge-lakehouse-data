@@ -11,6 +11,10 @@ variables:
   node_type_id:
     description: "SKU do node do job cluster"
     default: "Standard_F4"
+  tenant_id:
+    description: "Azure Tenant ID para DefaultAzureCredential"
+  client_secret:
+    description: "Client secret da SPN dinâmica para DefaultAzureCredential"
 
 # Executa o job como a SPN dinâmica 
 run_as:
@@ -77,11 +81,11 @@ targets:
                 data_security_mode: SINGLE_USER
                 custom_tags:
                   project: one-data
-                spark_env_vars:             
+                spark_env_vars:
                   # Auth SPN dinâmica (DefaultAzureCredential usa isso)
                   AZURE_CLIENT_ID: ${var.dynamic_spn_client_id}
-                  AZURE_TENANT_ID: ${env.AZURE_TENANT_ID}
-                  AZURE_CLIENT_SECRET: ${env.AZURE_CLIENT_SECRET}
+                  AZURE_TENANT_ID: ${var.tenant_id}
+                  AZURE_CLIENT_SECRET: ${var.client_secret}
                   # Monitoria
                   MON_TABLE_ACCOUNT: medalforgestorage
                   MON_TABLE_NAME: pipeline_runs

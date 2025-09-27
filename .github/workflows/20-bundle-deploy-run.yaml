@@ -116,9 +116,9 @@ jobs:
 
       - name: Export SPN envs for monitoring (Azure Table)
         run: |
-          echo "AZURE_CLIENT_ID=$DYN_SPN_ID" >> $GITHUB_ENV
-          echo "AZURE_TENANT_ID=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
-          echo "AZURE_CLIENT_SECRET=$DYN_SPN_SECRET" >> $GITHUB_ENV
+          echo "BUNDLE_VAR_dynamic_spn_client_id=$SPN_ID" >> $GITHUB_ENV
+          echo "BUNDLE_VAR_tenant_id=${{ secrets.ARM_TENANT_ID }}" >> $GITHUB_ENV
+          echo "BUNDLE_VAR_client_secret=$SPN_SECRET" >> $GITHUB_ENV
           echo "MON_TABLE_ACCOUNT=medalforgestorage" >> $GITHUB_ENV
           echo "MON_TABLE_NAME=pipeline_runs" >> $GITHUB_ENV
           echo "ENV=dev" >> $GITHUB_ENV
