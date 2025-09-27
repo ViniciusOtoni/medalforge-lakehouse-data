@@ -91,7 +91,7 @@ class TableManager:
         Retorno
         - representação DDL (ex.: STRING, INT, DECIMAL(10,2), array<string>, ...).
         """
-        # atômicos com nomes "bonitos"
+        # atômicos
         if isinstance(dt, StringType):    return "STRING"
         if isinstance(dt, IntegerType):   return "INT"
         if isinstance(dt, LongType):      return "BIGINT"
@@ -100,6 +100,7 @@ class TableManager:
         if isinstance(dt, DateType):      return "DATE"
         if isinstance(dt, TimestampType): return "TIMESTAMP"
         if isinstance(dt, DecimalType):   return f"DECIMAL({dt.precision},{dt.scale})"
+
         # complexos (array/map/struct) em DDL Spark nativa
         return dt.simpleString()  # ex.: array<string>, map<string,int>, struct<a:string,b:int>
 
@@ -126,13 +127,13 @@ class TableManager:
         names = {f.name for f in fields}
 
         ddl_parts = []
-        for f in fields:
-            base = f"{self._q(name=f.name)} {self._to_sql_type(dt=f.dataType)}"
-            if f.name in col_comments:
-                base += f" COMMENT '{self._esc(text=col_comments[f.name])}'"
+        for field in fields:
+            base = f"{self._q(name=field.name)} {self._to_sql_type(dt=field.dataType)}"
+            if field.name in col_comments:
+                base += f" COMMENT '{self._esc(text=col_comments[field.name])}'"
             ddl_parts.append(base)
 
-        # colunas de auditoria (se não vieram do contrato)
+        # colunas de auditoria (caso não tenham sido especificadas)
         if "ingestion_ts" not in names:
             cmt = col_comments.get("ingestion_ts")
             base = f"{self._q(name='ingestion_ts')} TIMESTAMP"
@@ -168,11 +169,11 @@ class TableManager:
         """
         if not col_comments:
             return
-        fq = f"{self._q(name=catalog)}.{self._q(name=schema)}.{self._q(name=table)}"
+        target_table = f"{self._q(name=catalog)}.{self._q(name=schema)}.{self._q(name=table)}"
         for col, comment in col_comments.items():
             self.spark.sql(
                 sqlQuery=(
-                    f"ALTER TABLE {fq} "
+                    f"ALTER TABLE {target_table} "
                     f"ALTER COLUMN {self._q(name=col)} "
                     f"COMMENT '{self._esc(text=comment)}'"
                 )
@@ -231,7 +232,7 @@ class TableManager:
             "delta.feature.timestampNtz": "supported",
             "delta.appendOnly": "true",  # Bronze: somente append
         }
-        props_clause = "TBLPROPERTIES (" + ", ".join([f"'{k}' = '{v}'" for k, v in props.items()]) + ")"
+        props_clause = "TBLPROPERTIES (" + ", ".join([f"'{key_prop}' = '{value_prop}'" for key_prop, value_prop in props.items()]) + ")"
 
         # 3) CREATE TABLE IF NOT EXISTS ... USING DELTA LOCATION ...
         sql = f"""

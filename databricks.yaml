@@ -48,7 +48,7 @@ targets:
                   - --mode
                   - validate+plan+ingest
                   - --contract_path
-                  - ./contracts/dummy.json
+                  - ../../contracts/dummy.json
               job_cluster_key: small_job_cluster
               libraries:
                 - pypi: { package: "pydantic>=2,<3" }
@@ -60,7 +60,7 @@ targets:
                 python_file: ./silver/main.py
                 parameters:
                   - --contract_path
-                  - ./contracts/dummy.yaml
+                  - ../../contracts/dummy.yaml
               job_cluster_key: small_job_cluster
               libraries:
                 - pypi: { package: "pydantic>=2,<3" }

@@ -1,217 +1,210 @@
 """
-Ingestors baseados em Auto Loader (cloudFiles) para CSV, JSON e TXT (delimitado).
-Cada ingestor lê do diretório de origem, enriquece com colunas de ingestão
-e escreve em Delta com checkpoint e schema evolution habilitado.
+Ingestors concretos baseados em Auto Loader (cloudFiles) para CSV, JSON e TXT-delimitado.
+As classes abaixo herdam o fluxo de ingestão de DataIngestor.ingest() (Template Method)
+e customizam apenas defaults/validações via hooks.
 """
 
 from __future__ import annotations
-from pyspark.sql import functions as F
+from typing import Any, Dict
 from interfaces.ingestor_interfaces import (
     StructuredDataIngestor,
     SemiStructuredDataIngestor,
-    UnstructuredDataIngestor,
 )
+# OBS: TXT "delimitado" também herda de StructuredDataIngestor (ver classe DelimitedTextIngestor)
 
 
 class CSVIngestor(StructuredDataIngestor):
     """
     Ingestor para arquivos CSV via Auto Loader.
 
-    Parâmetros esperados (via atributos herdados):
-    - self.spark: SparkSession
-    - self.schema_struct: StructType do arquivo
-    - self.partitions: list[str] para particionamento da tabela destino
-    - self.reader_options: dict (ex.: header, delimiter, nullValue)
-    - self.source_directory: str (pasta de origem)
-    - self.checkpoint_location: str (caminho de checkpoint)
-    - self.fqn: str (tabela alvo: catalog.schema.table)
+    Objetivo
+    --------
+    Aplicar leitura de CSV (Auto Loader cloudFiles → "csv") com defaults e validações
+    típicas de CSV, delegando o fluxo completo de ingestão (leitura → auditoria →
+    pós-leitura → escrita) ao método herdado `DataIngestor.ingest()`.
 
-    Método
+    Parâmetros esperados (herdados de DataIngestor)
+    ----------------------------------------------
+    spark : SparkSession
+        Sessão Spark ativa.
+    target_table : str
+        Tabela alvo no formato FQN (catalog.schema.table).
+    schema_struct : StructType
+        Schema a ser aplicado na leitura.
+    partitions : list[str]
+        Colunas de particionamento físico (opcional).
+    reader_options : dict[str, Any]
+        Opções específicas do leitor (sobrepõem os defaults da família CSV).
+        Ex.: {"delimiter": ";", "header": "true", "nullValue": ""}
+    source_directory : str
+        Diretório/prefixo de origem (RAW).
+    checkpoint_location : str
+        Caminho do checkpoint do stream.
+
+    Métodos sobrescritos (hooks)
+    ----------------------------
+    (nenhum obrigatório)
+    - Pode-se sobrescrever `default_reader_options()` para alterar defaults.
+    - Pode-se sobrescrever `validate_reader_options()` para validações extras.
+
+    Retorno
     -------
-    ingest(include_existing_files: bool = True) -> None
-        Lê CSV (batch), adiciona colunas de ingestão e grava em Delta.
+    N/A (o método `ingest()` herdado não retorna; realiza o streaming write para UC)
 
-    Exceptions
-    ----------
-    Propaga exceções de leitura/escrita do Spark.
+    Exceções
+    --------
+    Pode propagar exceções do Spark durante leitura/escrita/stream.
     """
-
-    def ingest(self, include_existing_files: bool = True) -> None:
-        source_dir = self.source_directory
-        checkpoint_path = self.checkpoint_location
-
-        try:
-            reader = (
-                self.spark.readStream
-                .format(source="cloudFiles")
-                .option(key="cloudFiles.format", value="csv")
-                .option(
-                    key="cloudFiles.includeExistingFiles",
-                    value="true" if include_existing_files else "false",
-                )
-                .option(key="cloudFiles.schemaLocation", value=checkpoint_path)
-                .schema(schema=self.schema_struct)
-            )
-
-            # Opções específicas do leitor CSV
-            for opt_key in ("header", "delimiter", "nullValue"):
-                if opt_key in self.reader_options:
-                    reader = reader.option(key=opt_key, value=self.reader_options[opt_key])
-
-            df = reader.load(path=source_dir)
-
-            # Carimbos de ingestão
-            df = (
-                df.withColumn(colName="ingestion_ts", col=F.current_timestamp())
-                  .withColumn(colName="ingestion_date", col=F.to_date(F.col("ingestion_ts")))
-            )
-
-            writer = (
-                df.writeStream
-                .format(source="delta")
-                .option(key="checkpointLocation", value=checkpoint_path)
-                .option(key="mergeSchema", value="true")
-                .outputMode(outputMode="append")
-                .trigger(availableNow=True)
-            )
-
-            if self.partitions:
-                writer = writer.partitionBy(*self.partitions)
-
-            writer.toTable(tableName=self.fqn)
-            print(f"[CSVIngestor] Ingestão concluída em table={self.fqn}")
-        except Exception as e:
-            print(f"[CSVIngestor] Erro ao ingerir (table={self.fqn}, src={source_dir}): {e}")
-            raise
+    # A classe já herda defaults e validações adequados de StructuredDataIngestor.
+    # Se quiser customizar algo de CSV em um caso específico (ex.: quote/escape),
+    # basta sobrescrever `default_reader_options()` ou `validate_reader_options()`.
 
 
 class JSONIngestor(SemiStructuredDataIngestor):
     """
     Ingestor para arquivos JSON via Auto Loader.
 
-    Ver campos herdados em CSVIngestor.
+    Objetivo
+    --------
+    Aplicar leitura de JSON (Auto Loader cloudFiles → "json") com defaults e
+    validações típicas (ex.: coerência de "multiline") e delegar o fluxo completo
+    de ingestão ao método herdado `DataIngestor.ingest()`.
 
-    Método
+    Parâmetros esperados (herdados de DataIngestor)
+    ----------------------------------------------
+    spark : SparkSession
+        Sessão Spark ativa.
+    target_table : str
+        Tabela alvo no formato FQN (catalog.schema.table).
+    schema_struct : StructType
+        Schema a ser aplicado na leitura.
+    partitions : list[str]
+        Colunas de particionamento físico (opcional).
+    reader_options : dict[str, Any]
+        Opções específicas do leitor (sobrepõem os defaults de JSON).
+        Ex.: {"multiline": "true"} quando a fonte é JSON array; para NDJSON, "false".
+    source_directory : str
+        Diretório/prefixo de origem (RAW).
+    checkpoint_location : str
+        Caminho do checkpoint do stream.
+
+    Métodos sobrescritos (hooks)
+    ----------------------------
+    - validate_reader_options(opts): valida coerência de "multiline".
+
+    Retorno
     -------
-    ingest(include_existing_files: bool = True) -> None
+    N/A (o método `ingest()` herdado não retorna; realiza o streaming write para UC)
 
-    Exceptions
-    ----------
-    Propaga exceções de leitura/escrita do Spark.
+    Exceções
+    --------
+    ValueError: quando "multiline" possui valor inválido.
+    Pode propagar exceções do Spark durante leitura/escrita/stream.
     """
 
-    def ingest(self, include_existing_files: bool = True) -> None:
-        source_dir = self.source_directory
-        checkpoint_path = self.checkpoint_location
+    def validate_reader_options(self, opts: Dict[str, Any]) -> None:
+        """
+        Valida coerência de opções JSON.
 
-        try:
-            reader = (
-                self.spark.readStream
-                .format(source="cloudFiles")
-                .option(key="cloudFiles.format", value="json")
-                .option(
-                    key="cloudFiles.includeExistingFiles",
-                    value="true" if include_existing_files else "false",
-                )
-                .option(key="cloudFiles.schemaLocation", value=checkpoint_path)
-                .schema(schema=self.schema_struct)
-            )
+        Parâmetros
+        ----------
+        opts : Dict[str, Any]
+            Opções finais aplicadas ao reader (defaults + overrides).
 
-            # Opção específica para JSON multi-linha
-            if "multiline" in self.reader_options:
-                reader = reader.option(key="multiline", value=self.reader_options["multiline"])
+        Retorno
+        -------
+        None
 
-            df = reader.load(path=source_dir)
-
-            df = (
-                df.withColumn(colName="ingestion_ts", col=F.current_timestamp())
-                  .withColumn(colName="ingestion_date", col=F.to_date(F.col("ingestion_ts")))
-            )
-
-            writer = (
-                df.writeStream
-                .format(source="delta")
-                .option(key="checkpointLocation", value=checkpoint_path)
-                .option(key="mergeSchema", value="true")
-                .outputMode(outputMode="append")
-                .trigger(availableNow=True)
-            )
-
-            if self.partitions:
-                writer = writer.partitionBy(*self.partitions)
-
-            writer.toTable(tableName=self.fqn)
-            print(f"[JSONIngestor] Ingestão concluída em table={self.fqn}")
-        except Exception as e:
-            print(f"[JSONIngestor] Erro ao ingerir (table={self.fqn}, src={source_dir}): {e}")
-            raise
+        Exceções
+        --------
+        ValueError
+            Se 'multiline' não estiver em {"true", "false"} (quando fornecido).
+        """
+        ml = opts.get("multiline")
+        if ml is not None and str(ml).lower() not in {"true", "false"}:
+            raise ValueError("JSON: 'multiline' deve ser 'true' ou 'false'.")
 
 
-class TextIngestor(UnstructuredDataIngestor):
+class DelimitedTextIngestor(StructuredDataIngestor):
     """
     Ingestor para arquivos TXT delimitados (tratados como CSV) via Auto Loader.
 
-    Requer em reader_options:
-    - delimiter: str
+    Observação
+    ----------
+    TXT "delimitado" é conceitualmente CSV. Por isso, herdamos de StructuredDataIngestor
+    (formato 'csv') e apenas reforçamos a obrigatoriedade do 'delimiter' via validação.
 
-    Método
+    Parâmetros esperados (herdados de DataIngestor)
+    ----------------------------------------------
+    spark : SparkSession
+        Sessão Spark ativa.
+    target_table : str
+        Tabela alvo no formato FQN (catalog.schema.table).
+    schema_struct : StructType
+        Schema a ser aplicado na leitura.
+    partitions : list[str]
+        Colunas de particionamento físico (opcional).
+    reader_options : dict[str, Any]
+        Deve conter 'delimiter' obrigatoriamente.
+        Ex.: {"delimiter": "|", "header": "false"}
+    source_directory : str
+        Diretório/prefixo de origem (RAW).
+    checkpoint_location : str
+        Caminho do checkpoint do stream.
+
+    Métodos sobrescritos (hooks)
+    ----------------------------
+    - default_reader_options(): usa defaults de CSV e permite override.
+    - validate_reader_options(opts): exige 'delimiter'.
+
+    Retorno
     -------
-    ingest(include_existing_files: bool = True) -> None
+    N/A (o método `ingest()` herdado não retorna; realiza o streaming write para UC)
 
-    Raises
-    ------
-    ValueError: quando 'delimiter' não é fornecido.
-    Outras exceções do Spark podem ser propagadas.
+    Exceções
+    --------
+    ValueError: se 'reader_options["delimiter"]' estiver ausente/vazio.
+    Pode propagar exceções do Spark durante leitura/escrita/stream.
     """
 
-    def ingest(self, include_existing_files: bool = True) -> None:
-        source_dir = self.source_directory
-        checkpoint_path = self.checkpoint_location
+    def default_reader_options(self) -> Dict[str, Any]:
+        """
+        Opções default baseadas em CSV para TXT-delimitado.
 
-        try:
-            if "delimiter" not in self.reader_options:
-                raise ValueError(
-                    "Para TXT delimitado, 'reader_options[\"delimiter\"]' é obrigatório."
-                )
+        Retorno
+        -------
+        Dict[str, Any]
+            Defaults herdados de CSV + qualquer ajuste desejado para TXT.
+        """
+        # Reaproveita os defaults de StructuredDataIngestor e,
+        # se quiser, adicione/ajuste algo específico aqui:
+        opts = super().default_reader_options()
+        # Ex.: remover header como default para TXT, se preferir:
+        # opts["header"] = "false"
+        return opts
 
-            reader = (
-                self.spark.readStream
-                .format(source="cloudFiles")
-                .option(key="cloudFiles.format", value="csv")  # TXT como CSV
-                .option(
-                    key="cloudFiles.includeExistingFiles",
-                    value="true" if include_existing_files else "false",
-                )
-                .option(key="cloudFiles.schemaLocation", value=checkpoint_path)
-                .schema(schema=self.schema_struct)
-                .option(key="header", value=self.reader_options.get("header", False))
-                .option(key="delimiter", value=self.reader_options["delimiter"])
+    def validate_reader_options(self, opts: Dict[str, Any]) -> None:
+        """
+        Validações específicas para TXT-delimitado.
+
+        Parâmetros
+        ----------
+        opts : Dict[str, Any]
+            Opções finais aplicadas ao reader (defaults + overrides).
+
+        Retorno
+        -------
+        None
+
+        Exceções
+        --------
+        ValueError
+            Se 'delimiter' não existir ou estiver vazio.
+        """
+        delimiter = opts.get("delimiter")
+        if delimiter is None or str(delimiter) == "":
+            raise ValueError(
+                "TXT-delimitado: 'reader_options[\"delimiter\"]' é obrigatório e não pode ser vazio."
             )
-
-            if "nullValue" in self.reader_options:
-                reader = reader.option(key="nullValue", value=self.reader_options["nullValue"])
-
-            df = reader.load(path=source_dir)
-
-            df = (
-                df.withColumn(colName="ingestion_ts", col=F.current_timestamp())
-                  .withColumn(colName="ingestion_date", col=F.to_date(F.col("ingestion_ts")))
-            )
-
-            writer = (
-                df.writeStream
-                .format(source="delta")
-                .option(key="checkpointLocation", value=checkpoint_path)
-                .option(key="mergeSchema", value="true")
-                .outputMode(outputMode="append")
-                .trigger(availableNow=True)
-            )
-
-            if self.partitions:
-                writer = writer.partitionBy(*self.partitions)
-
-            writer.toTable(tableName=self.fqn)
-            print(f"[TextIngestor] Ingestão concluída em table={self.fqn}")
-        except Exception as e:
-            print(f"[TextIngestor] Erro ao ingerir (table={self.fqn}, src={source_dir}): {e}")
-            raise
+        # Também reutiliza validações de CSV (delimiter não vazio)
+        super().validate_reader_options(opts)
