@@ -12,7 +12,7 @@ variables:
     description: "SKU do node do job cluster"
     default: "Standard_F4"
 
-# run_as pode continuar usando var (vamos injetar por env DATABRICKS_BUNDLE_VAR_dynamic_spn_client_id)
+# Executa o job como a SPN dinâmica (passada via var no deploy)
 run_as:
   service_principal_name: ${var.dynamic_spn_client_id}
 
@@ -23,7 +23,7 @@ targets:
       include:
         - bronze/**
         - silver/**
-
+        - monitoring/**   # (seu módulo de monitoria)
       exclude:
         - .git/**
         - .github/**
@@ -35,6 +35,7 @@ targets:
           permissions:
             - level: CAN_MANAGE
               service_principal_name: ${var.dynamic_spn_client_id}
+
           tasks:
             - task_key: bronze_ingest
               spark_python_task:
@@ -46,8 +47,16 @@ targets:
                   - ./contracts/dummy.json
               job_cluster_key: small_job_cluster
               libraries:
-                - pypi:
-                    package: "pydantic>=2,<3"
+                - pypi: { package: "pydantic>=2,<3" }
+              environment_variables:
+                # Auth SPN dinâmica (usada se bronze precisar falar com Azure)
+                AZURE_CLIENT_ID: ${var.dynamic_spn_client_id}
+                AZURE_TENANT_ID: ${secrets.kv.tenant-id}
+                AZURE_CLIENT_SECRET: ${secrets.kv.spn-client-secret}
+                # Monitoria (não deve escrever nada aqui, mas deixo igual por consistência)
+                MON_TABLE_ACCOUNT: medalforgestorage
+                MON_TABLE_NAME: pipeline_runs
+                ENV: dev
 
             - task_key: silver_transform
               depends_on:
@@ -60,7 +69,19 @@ targets:
               job_cluster_key: small_job_cluster
               libraries:
                 - pypi: { package: "pydantic>=2,<3" }
-                - pypi: { package: "databricks-labs-dqx==0.8.0" } 
+                - pypi: { package: "databricks-labs-dqx==0.8.0" }
+                # libs para monitorar em Azure Table Storage
+                - pypi: { package: "azure-identity>=1.16.0" }
+                - pypi: { package: "azure-data-tables>=12.5.0" }
+              environment_variables:
+                # Auth SPN dinâmica (DefaultAzureCredential pega dessas ENVs)
+                AZURE_CLIENT_ID: ${var.dynamic_spn_client_id}
+                AZURE_TENANT_ID: ${secrets.kv.tenant-id}
+                AZURE_CLIENT_SECRET: ${secrets.kv.spn-client-secret}
+                # Config da tabela de monitoria
+                MON_TABLE_ACCOUNT: medalforgestorage
+                MON_TABLE_NAME: pipeline_runs
+                ENV: dev
 
           job_clusters:
             - job_cluster_key: small_job_cluster
@@ -73,5 +94,4 @@ targets:
                 data_security_mode: SINGLE_USER
                 custom_tags:
                   project: one-data
-                  layer: bronze
-                  purpose: ingest
+

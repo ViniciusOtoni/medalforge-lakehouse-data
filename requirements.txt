@@ -6,3 +6,5 @@ googleapis-common-protos
 grpcio
 pytest
 pytest-cov
+azure-identity>=1.15
+azure-data-tables>=12.5

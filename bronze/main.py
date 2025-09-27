@@ -31,9 +31,12 @@ from pyspark.sql import SparkSession
 from managers.data_contract_manager import DataContractManager
 from managers.table_manager import TableManager
 from ingestors.factory import IngestorFactory
+from monitoring.azure_table_runs import PipelineRunLogger
+
 
 
 sys.path.append(os.getcwd())
+ENV = os.getenv("ENV", "dev")
 
 # ---------------------------------------------------------------------------
 # HARD-CODED roots
@@ -228,89 +231,98 @@ def main() -> None:
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     params = _parse_args()
 
-    # Carrega e valida contrato
+    # Carrega contrato
     with open(params["contract_path"], "r", encoding="utf-8") as f:
         raw = f.read()
     mgr = DataContractManager(contract=raw)
-    # fqn, schema_struct, format, reader_options, partitions, column_comments
     payload = mgr.as_ingestion_payload()
 
-    # Normaliza modo e defaults D-1
-    do_validate, do_plan, do_ingest = _normalize_mode(mode=params.get("mode", "validate+plan"))
-    include_existing = True if params.get("include_existing_override") is None else bool(
-        params["include_existing_override"]
-    )
-
-    # Deriva caminhos (RAW raiz, BRONZE location/ckpt)
-    paths = _build_paths(
-        catalog=mgr.catalog,
+    # --- MONITORAMENTO (apenas pipeline_runs) ---
+    run_extra = {"mode": params.get("mode")}
+    with PipelineRunLogger(
+        env=ENV,
+        pipeline="bronze",
         schema=mgr.schema,
         table=mgr.table,
-        reprocess_label=params.get("reprocess_label"),
-    )
+        target_fqn=mgr.fqn,
+        extra=run_extra,
+    ) as runlog:
 
-    # Sempre garante a tabela antes de qualquer ingestão
-    _ensure_table(
-        spark=spark,
-        mgr=mgr,
-        schema_struct=payload["schema_struct"],
-        partitions=payload["partitions"],
-        table_location=paths["table_location"],
-    )
-
-    outputs: Dict[str, Any] = {"status": [], "details": {}}
-
-    # validate
-    if do_validate:
-        outputs["status"].append("validated")
-        outputs["details"]["validate"] = {
-            "fqn": mgr.fqn,
-            "columns": mgr.column_names,
-            "partitions_effective": mgr.effective_partitions,
-            "format": payload["format"],
-       
-            "reader_options_merged": DataContractManager(
-                contract=mgr._model.dict()
-            ).reader_options(),
-        }
-
-    # plan
-    if do_plan:
-        outputs["status"].append("planned")
-        outputs["details"]["plan"] = _plan_dict(
-            mgr=mgr,
-            payload=payload,
-            paths=paths,
-            include_existing=include_existing,
+        # Normaliza modo e D-1
+        do_validate, do_plan, do_ingest = _normalize_mode(mode=params.get("mode", "validate+plan"))
+        include_existing = True if params.get("include_existing_override") is None else bool(
+            params["include_existing_override"]
         )
 
-    # ingest
-    if do_ingest:
-        try:
-            ingestor = IngestorFactory.create(
-                data_format=payload["format"],          
-                spark=spark,
-                target_table_fqn=payload["fqn"],
-                schema=payload["schema_struct"],
-                partitions=payload["partitions"],
-                reader_options=payload["reader_options"],
-                source_directory=paths["source_directory"],
-                checkpoint_location=paths["checkpointLocation"],
-            )
-            # gatilho sempre availableNow nos ingestors
-            ingestor.ingest(include_existing_files=include_existing)
-            outputs["status"].append("ingested")
-            outputs["details"]["ingest"] = {
-                "table": payload["fqn"],
-                "checkpoint": paths["checkpointLocation"],
-            }
-        except Exception as e:
-            print(f"[INGEST][ERROR] {e}", file=sys.stderr)
-            raise
+        # Deriva caminhos
+        paths = _build_paths(
+            catalog=mgr.catalog,
+            schema=mgr.schema,
+            table=mgr.table,
+            reprocess_label=params.get("reprocess_label"),
+        )
 
-    if not outputs["status"]:
-        outputs["status"] = ["noop"]
-    print(json.dumps(obj=outputs, ensure_ascii=False, indent=2))
+        # Garante tabela
+        _ensure_table(
+            spark=spark,
+            mgr=mgr,
+            schema_struct=payload["schema_struct"],
+            partitions=payload["partitions"],
+            table_location=paths["table_location"],
+        )
+
+        outputs: Dict[str, Any] = {"status": [], "details": {}}
+
+        if do_validate:
+            outputs["status"].append("validated")
+            outputs["details"]["validate"] = {
+                "fqn": mgr.fqn,
+                "columns": mgr.column_names,
+                "partitions_effective": mgr.effective_partitions,
+                "format": payload["format"],
+                "reader_options_merged": DataContractManager(
+                    contract=mgr._model.dict()
+                ).reader_options(),
+            }
+
+        if do_plan:
+            outputs["status"].append("planned")
+            outputs["details"]["plan"] = _plan_dict(
+                mgr=mgr,
+                payload=payload,
+                paths=paths,
+                include_existing=include_existing,
+            )
+
+        if do_ingest:
+            try:
+                ingestor = IngestorFactory.create(
+                    data_format=payload["format"],
+                    spark=spark,
+                    target_table_fqn=payload["fqn"],
+                    schema=payload["schema_struct"],
+                    partitions=payload["partitions"],
+                    reader_options=payload["reader_options"],
+                    source_directory=paths["source_directory"],
+                    checkpoint_location=paths["checkpointLocation"],
+                )
+                ingestor.ingest(include_existing_files=include_existing)
+                outputs["status"].append("ingested")
+                outputs["details"]["ingest"] = {
+                    "table": payload["fqn"],
+                    "checkpoint": paths["checkpointLocation"],
+                }
+                # Se quiser gravar alguma métrica:
+                runlog.finish(status="ok")  # explícito (também será chamado no __exit__)
+            except Exception as e:
+                # marcar como fail (com erro); __exit__ também fará isso, mas deixo claro
+                runlog.finish(status="fail", error_json=str(e))
+                print(f"[INGEST][ERROR] {e}", file=sys.stderr)
+                raise
+
+        if not outputs["status"]:
+            outputs["status"] = ["noop"]
+        print(json.dumps(obj=outputs, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
