@@ -23,7 +23,7 @@ targets:
       include:
         - bronze/**
         - silver/**
-        - monitoring/**   # (seu módulo de monitoria)
+        - monitoring/**   # módulo de monitoria
       exclude:
         - .git/**
         - .github/**
@@ -49,11 +49,11 @@ targets:
               libraries:
                 - pypi: { package: "pydantic>=2,<3" }
               environment_variables:
-                # Auth SPN dinâmica (usada se bronze precisar falar com Azure)
+                # Auth SPN dinâmica
                 AZURE_CLIENT_ID: ${var.dynamic_spn_client_id}
-                AZURE_TENANT_ID: ${secrets.kv.tenant-id}
-                AZURE_CLIENT_SECRET: ${secrets.kv.spn-client-secret}
-                # Monitoria (não deve escrever nada aqui, mas deixo igual por consistência)
+                AZURE_TENANT_ID: ${env.AZURE_TENANT_ID}
+                AZURE_CLIENT_SECRET: ${env.AZURE_CLIENT_SECRET}
+                # Monitoria
                 MON_TABLE_ACCOUNT: medalforgestorage
                 MON_TABLE_NAME: pipeline_runs
                 ENV: dev
@@ -70,15 +70,14 @@ targets:
               libraries:
                 - pypi: { package: "pydantic>=2,<3" }
                 - pypi: { package: "databricks-labs-dqx==0.8.0" }
-                # libs para monitorar em Azure Table Storage
                 - pypi: { package: "azure-identity>=1.16.0" }
                 - pypi: { package: "azure-data-tables>=12.5.0" }
               environment_variables:
-                # Auth SPN dinâmica (DefaultAzureCredential pega dessas ENVs)
+                # Auth SPN dinâmica
                 AZURE_CLIENT_ID: ${var.dynamic_spn_client_id}
-                AZURE_TENANT_ID: ${secrets.kv.tenant-id}
-                AZURE_CLIENT_SECRET: ${secrets.kv.spn-client-secret}
-                # Config da tabela de monitoria
+                AZURE_TENANT_ID: ${env.AZURE_TENANT_ID}
+                AZURE_CLIENT_SECRET: ${env.AZURE_CLIENT_SECRET}
+                # Monitoria
                 MON_TABLE_ACCOUNT: medalforgestorage
                 MON_TABLE_NAME: pipeline_runs
                 ENV: dev
@@ -91,7 +90,8 @@ targets:
                 autoscale:
                   min_workers: 1
                   max_workers: 2
+                azure_attributes:
+                  availability: SPOT_WITH_FALLBACK_AZURE
                 data_security_mode: SINGLE_USER
                 custom_tags:
                   project: one-data
-
