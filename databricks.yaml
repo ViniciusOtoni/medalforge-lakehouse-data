@@ -77,8 +77,8 @@ targets:
                 data_security_mode: SINGLE_USER
                 custom_tags:
                   project: one-data
-                environment_variables:  
-                  # Auth SPN dinâmica
+                spark_env_vars:             
+                  # Auth SPN dinâmica (DefaultAzureCredential usa isso)
                   AZURE_CLIENT_ID: ${var.dynamic_spn_client_id}
                   AZURE_TENANT_ID: ${env.AZURE_TENANT_ID}
                   AZURE_CLIENT_SECRET: ${env.AZURE_CLIENT_SECRET}
