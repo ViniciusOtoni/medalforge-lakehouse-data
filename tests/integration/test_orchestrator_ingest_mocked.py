@@ -1,5 +1,4 @@
 import bronze.orchestrator as orch_mod
-from bronze.ingestors.factory import IngestorFactory
 from bronze.models import BaseLocations, RunnerConfig
 from bronze.orchestrator import BronzeOrchestrator
 
@@ -12,11 +11,10 @@ class _FakeIngestor:
         _FakeIngestor._ingest_include_existing = include_existing_files
 
 def test_orchestrator_ingest_calls_factory(monkeypatch, spark, contract_json_csv):
-    # Patch no símbolo realmente usado pelo orquestrador
+    # Patch dos símbolos realmente usados pelo orquestrador
     monkeypatch.setattr(orch_mod.TableManager, "ensure_external_table", lambda *a, **k: None)
     monkeypatch.setattr(orch_mod.TableManager, "ensure_schema", lambda *a, **k: None)
-
-    monkeypatch.setitem(IngestorFactory._FORMAT_REGISTRY, "csv", _FakeIngestor)
+    monkeypatch.setitem(orch_mod.IngestorFactory._FORMAT_REGISTRY, "csv", _FakeIngestor)
 
     base = BaseLocations(
         raw_root="abfss://raw@acc.dfs.core.windows.net",
