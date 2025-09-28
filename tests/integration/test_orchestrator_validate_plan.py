@@ -1,12 +1,12 @@
-import json
+from bronze.managers import table_manager as tm_mod
 from bronze.models import BaseLocations, RunnerConfig
 from bronze.orchestrator import BronzeOrchestrator
-from bronze.managers import table_manager as tm_mod
 
 
 def test_orchestrator_validate_and_plan_only(monkeypatch, spark, contract_json_csv):
     
     monkeypatch.setattr(tm_mod.TableManager, "ensure_external_table", lambda *a, **k: None)
+    monkeypatch.setattr(tm_mod.TableManager, "ensure_schema", lambda *a, **k: None)
 
     base = BaseLocations(
         raw_root="abfss://raw@acc.dfs.core.windows.net",

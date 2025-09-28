@@ -1,8 +1,7 @@
-import types
+from bronze.managers import table_manager as tm_mod
+from bronze.ingestors.factory import IngestorFactory
 from bronze.models import BaseLocations, RunnerConfig
 from bronze.orchestrator import BronzeOrchestrator
-from bronze.ingestors.factory import IngestorFactory
-from bronze.managers import table_manager as tm_mod
 
 
 class _FakeIngestor:
@@ -17,6 +16,8 @@ class _FakeIngestor:
 def test_orchestrator_ingest_calls_factory(monkeypatch, spark, contract_json_csv):
     # Evita DDL real (Unity Catalog)
     monkeypatch.setattr(tm_mod.TableManager, "ensure_external_table", lambda *a, **k: None)
+    monkeypatch.setattr(tm_mod.TableManager, "ensure_schema", lambda *a, **k: None)
+
     # Substitui ingestor real por fake
     monkeypatch.setitem(IngestorFactory._FORMAT_REGISTRY, "csv", _FakeIngestor)
 
