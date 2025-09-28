@@ -61,7 +61,7 @@ targets:
                   - --mode
                   - validate+plan+ingest
                   - --contract_path
-                  - ${workspace.file_path}/contracts/bronze/dummy.json
+                  - ${workspace.file_path}/src/onedata/contracts/bronze/dummy.json
               job_cluster_key: small_job_cluster
               libraries:
                 - whl: ./dist/onedata-*.whl 
@@ -74,7 +74,7 @@ targets:
                 entry_point: silver_main
                 parameters:
                   - --contract_path
-                  - ${workspace.file_path}/contracts/silver/dummy.yaml
+                  - ${workspace.file_path}/src/onedata/contracts/silver/dummy.yaml
               job_cluster_key: small_job_cluster
               libraries:
                 - pypi: { package: "databricks-labs-dqx==0.8.0" }
