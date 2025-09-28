@@ -21,7 +21,7 @@ def test_paths_model():
 
 def test_ingestion_plan_as_dict():
     plan = IngestionPlan(
-        target_table="bronze.sales.orders",
+        contract_fqn="bronze.sales.orders",
         data_format="csv",
         reader_options={"header": "true", "delimiter": ","},
         partitions=["created_at", "ingestion_date"],
@@ -31,6 +31,6 @@ def test_ingestion_plan_as_dict():
         include_existing_files=True,
     )
     d = plan.as_dict()
-    assert d["target_table"] == "bronze.sales.orders"
+    assert d["contract_fqn"] == "bronze.sales.orders"
     assert d["format"] == "csv"
     assert d["includeExistingFiles"] is True

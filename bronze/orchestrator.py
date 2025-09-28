@@ -155,7 +155,7 @@ class BronzeOrchestrator:
         target_fqn = self._resolve_target_fqn(payload, contractManager)
 
         plan = IngestionPlan(
-            target_table=target_fqn,
+            contract_fqn=target_fqn,
             data_format=payload["format"],
             reader_options=payload["reader_options"],
             partitions=payload["partitions"],
