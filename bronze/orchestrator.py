@@ -191,7 +191,7 @@ class BronzeOrchestrator:
             location=table_location,
             schema_struct=schema_struct,
             partitions=partitions,
-            comment="Bronze table (contract-managed)",
+            comment="Bronze table created by One Data Proccess!",
             column_comments=contractManager.column_comments(),
         )
 
