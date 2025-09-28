@@ -1,6 +1,6 @@
-import bronze.orchestrator as orch_mod
-from bronze.models import BaseLocations, RunnerConfig
-from bronze.orchestrator import BronzeOrchestrator
+import onedata.bronze.orchestrator as orch_mod
+from onedata.bronze.models import BaseLocations, RunnerConfig
+from onedata.bronze.orchestrator import BronzeOrchestrator
 
 def test_orchestrator_validate_and_plan_only(monkeypatch, spark, contract_json_csv):
     monkeypatch.setattr(orch_mod.TableManager, "ensure_external_table", lambda *a, **k: None)

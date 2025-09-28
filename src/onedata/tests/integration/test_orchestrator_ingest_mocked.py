@@ -1,6 +1,6 @@
-import bronze.orchestrator as orch_mod
-from bronze.models import BaseLocations, RunnerConfig
-from bronze.orchestrator import BronzeOrchestrator
+import onedata.bronze.orchestrator as orch_mod
+from onedata.bronze.models import BaseLocations, RunnerConfig
+from onedata.bronze.orchestrator import BronzeOrchestrator
 
 class _FakeIngestor:
     def __init__(self, **kwargs):
