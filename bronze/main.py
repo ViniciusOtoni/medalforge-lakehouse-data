@@ -12,8 +12,10 @@ from typing import Any, Dict
 
 from pyspark.sql import SparkSession
 
-from .models import RunnerConfig, BaseLocations
-from .orchestrator import BronzeOrchestrator
+from models import RunnerConfig, BaseLocations
+from orchestrator import BronzeOrchestrator
+
+sys.path.append(os.getcwd())
 
 
 def _parse_args() -> Dict[str, Any]:

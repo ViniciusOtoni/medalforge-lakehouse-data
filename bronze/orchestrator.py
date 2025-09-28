@@ -9,7 +9,7 @@ from typing import Any, Dict, Tuple
 
 from pyspark.sql import SparkSession
 
-from .models import RunnerConfig, BaseLocations, Paths, IngestionPlan
+from models import RunnerConfig, BaseLocations, Paths, IngestionPlan
 from managers.data_contract_manager import DataContractManager
 from managers.table_manager import TableManager
 from ingestors.factory import IngestorFactory
