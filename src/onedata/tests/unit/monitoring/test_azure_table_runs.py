@@ -2,6 +2,7 @@ import os
 import types
 
 from onedata.monitoring.azure_table_runs import PipelineRunLogger
+import onedata.monitoring.azure_table_runs as mod
 
 
 def test_noop_when_env_missing(monkeypatch):
@@ -26,7 +27,6 @@ def test_finish_not_called_twice(monkeypatch):
             self.entities.append((mode, entity))
 
     # monkeypatch interno: forçar _table_client a devolver FakeClient
-    import monitoring.azure_table_runs as mod
     monkeypatch.setenv("MON_TABLE_ACCOUNT", "acc")
     mod.TableServiceClient = types.SimpleNamespace(
         __call__=lambda *a, **k: None,
