@@ -5,7 +5,7 @@ Entrada CLI do pipeline Silver.
 from __future__ import annotations
 import argparse, yaml
 from pyspark.sql import SparkSession
-from onedata.silver.domain import SilverYaml
+from onedata.silver.domain.silver import SilverYaml
 from onedata.silver.application.pipeline import run_pipeline
 
 def _parse_args():
