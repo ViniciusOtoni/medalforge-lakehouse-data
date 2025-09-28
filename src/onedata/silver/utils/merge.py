@@ -140,7 +140,6 @@ def merge_upsert(
 
     Observações
     - O MERGE usa todas as colunas do DataFrame no SET/INSERT.
-    - Cuidado com custos: `df.head(1)` aciona ação; evita MERGE em df vazio.
     """
     _ensure_external_table_from_df(
         df=df,
