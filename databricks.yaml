@@ -100,5 +100,5 @@ targets:
                   AZURE_CLIENT_SECRET: ${var.client_secret}
                   # Monitoria
                   MON_TABLE_ACCOUNT: medalforgestorage
-                  MON_TABLE_NAME: pipeline_runs
+                  MON_TABLE_NAME: pipelineruns
                   ENV: dev
