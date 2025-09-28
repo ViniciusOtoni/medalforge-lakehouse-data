@@ -81,7 +81,7 @@ def main() -> None:
         contract_json = f.read()
 
     orch = BronzeOrchestrator(spark=spark, base_locations=base, env=env)
-    outputs = orch.run(contract_json=contract_json, cfg=cfg)
+    outputs = orch.run(contract_json=contract_json, configRunner=cfg)
 
     print(json.dumps(obj=outputs, ensure_ascii=False, indent=2))
 
