@@ -9,11 +9,11 @@ from typing import Any, Dict, Tuple
 
 from pyspark.sql import SparkSession
 
-from bronze.models import RunnerConfig, BaseLocations, Paths, IngestionPlan
-from bronze.managers.data_contract_manager import DataContractManager
-from bronze.managers.table_manager import TableManager
-from bronze.ingestors.factory import IngestorFactory
-from monitoring.azure_table_runs import PipelineRunLogger
+from onedata.bronze.models import RunnerConfig, BaseLocations, Paths, IngestionPlan
+from onedata.bronze.managers.data_contract_manager import DataContractManager
+from onedata.bronze.managers.table_manager import TableManager
+from onedata.bronze.ingestors.factory import IngestorFactory
+from onedata.monitoring.azure_table_runs import PipelineRunLogger
 
 
 class BronzeOrchestrator:

@@ -12,12 +12,10 @@ from typing import Any, Dict
 from pathlib import Path
 from pyspark.sql import SparkSession
 
-REPO_ROOT = Path(__file__).resolve().parents[1] 
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
-from bronze.models import RunnerConfig, BaseLocations
-from bronze.orchestrator import BronzeOrchestrator
+
+from onedata.bronze.models import RunnerConfig, BaseLocations
+from onedata.bronze.orchestrator import BronzeOrchestrator
 
 def _parse_args() -> Dict[str, Any]:
     """

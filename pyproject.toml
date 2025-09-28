@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onedata"
+version = "0.1.0"
+description = "Pipelines Bronze/Silver com monitoramento e DQX"
+readme = "README.md"
+requires-python = ">=3.10"
+
+# Dependências comuns a TODO o projeto (sempre instaladas com o wheel)
+dependencies = [
+    "pyspark>=3.5,<3.6",
+    "delta-spark>=3,<4",
+    "pydantic>=2,<3",
+    "azure-identity>=1.16.0",
+    "azure-data-tables>=12.5.0",
+]
+
+# Extras (instalados só quando necessário)
+[project.optional-dependencies]
+# Dependências adicionais para testes (se você tem pytest, coverage etc.)
+dev = [
+    "pytest>=7,<8",
+    "pytest-cov>=4,<5",
+]
+
+# Dependências específicas da Silver (DQX e outras libs de transformação)
+silver = [
+    "databricks-labs-dqx==0.8.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["onedata*"]
+
+# Ponto de entrada CLI (facilita executar localmente ou no Databricks)
+[project.scripts]
+bronze_main = "onedata.bronze.main:main"
+silver_main = "onedata.silver.main:main"

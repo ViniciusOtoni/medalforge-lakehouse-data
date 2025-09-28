@@ -16,7 +16,6 @@ variables:
   client_secret:
     description: "Client secret da SPN dinâmica para DefaultAzureCredential"
 
-# Executa o job como a SPN dinâmica 
 run_as:
   service_principal_name: ${var.dynamic_spn_client_id}
 
@@ -25,9 +24,9 @@ targets:
     default: true
     sync:
       include:
-        - bronze/**
-        - silver/**
-        - monitoring/**   # módulo de monitoria
+        - src/**                
+        - pyproject.toml          
+        - contracts/**           
       exclude:
         - .git/**
         - .github/**
@@ -42,32 +41,27 @@ targets:
 
           tasks:
             - task_key: bronze_ingest
-              spark_python_task:
-                python_file: ./bronze/main.py
+              python_wheel_task:
+                package_name: onedata
+                entry_point: bronze_main          
                 parameters:
                   - --mode
                   - validate+plan+ingest
                   - --contract_path
-                  - ../../contracts/bronze/dummy.json
+                  - ${workspace.file_path}/contracts/bronze/dummy.json
               job_cluster_key: small_job_cluster
-              libraries:
-                - pypi: { package: "pydantic>=2,<3" }
-
             - task_key: silver_transform
               depends_on:
                 - task_key: bronze_ingest
-              spark_python_task:
-                python_file: ./silver/main.py
+              python_wheel_task:
+                package_name: onedata
+                entry_point: silver_main
                 parameters:
                   - --contract_path
-                  - ../../contracts/silver/dummy.yaml
+                  - ${workspace.file_path}/contracts/silver/dummy.yaml
               job_cluster_key: small_job_cluster
-              libraries:
-                - pypi: { package: "pydantic>=2,<3" }
-                - pypi: { package: "databricks-labs-dqx==0.8.0" }
-                - pypi: { package: "azure-identity>=1.16.0" }
-                - pypi: { package: "azure-data-tables>=12.5.0" }
-
+              pip_install_extras:
+                - silver
           job_clusters:
             - job_cluster_key: small_job_cluster
               new_cluster:
