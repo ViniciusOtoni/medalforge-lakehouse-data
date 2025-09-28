@@ -9,14 +9,15 @@ import json
 import os
 import sys
 from typing import Any, Dict
-
+from pathlib import Path
 from pyspark.sql import SparkSession
+
+REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 from models import RunnerConfig, BaseLocations
 from orchestrator import BronzeOrchestrator
-
-sys.path.append(os.getcwd())
-
 
 def _parse_args() -> Dict[str, Any]:
     """
