@@ -24,12 +24,17 @@ targets:
     default: true
     sync:
       include:
-        - src/**                
-        - pyproject.toml          
-        - contracts/**           
+        - src/**
+        - pyproject.toml
+        - contracts/**
       exclude:
         - .git/**
         - .github/**
+    
+    artifacts:
+      onedata_wheel:
+        type: whl
+        path: .   # raiz onde está o pyproject.toml
 
     resources:
       jobs:
@@ -50,6 +55,9 @@ targets:
                   - --contract_path
                   - ${workspace.file_path}/contracts/bronze/dummy.json
               job_cluster_key: small_job_cluster
+              libraries:
+                - whl: ${artifacts.onedata_wheel.whl}
+
             - task_key: silver_transform
               depends_on:
                 - task_key: bronze_ingest
@@ -62,6 +70,8 @@ targets:
               job_cluster_key: small_job_cluster
               libraries:
                 - pypi: { package: "databricks-labs-dqx==0.8.0" }
+                - whl: ${artifacts.onedata_wheel.whl}
+                
           job_clusters:
             - job_cluster_key: small_job_cluster
               new_cluster:
