@@ -5,7 +5,7 @@ Estágio ETL: strip colunas técnicas DQX, aplica steps core e customs por está
 from __future__ import annotations
 from typing import List, Optional, Iterable, Callable, Dict
 from pyspark.sql import DataFrame
-from onedata.silver.domain import Step, CustomsCfg
+from onedata.silver.domain.etl import Step, CustomsCfg
 from onedata.silver.etl import core as etl_core
 from onedata.silver.customs.runner import apply_customs_stage
 

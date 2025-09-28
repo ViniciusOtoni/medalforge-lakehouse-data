@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Optional, Iterable, Callable
 from pyspark.sql import DataFrame
-from onedata.silver.domain import CustomsCfg, CustomDecl, Step
+from onedata.silver.domain.etl import CustomsCfg, CustomDecl, Step
 from onedata.silver.customs.loader import load_custom
 from onedata.silver.customs.args import validate_and_normalize_args
 

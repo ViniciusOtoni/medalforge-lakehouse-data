@@ -4,7 +4,7 @@ Estágio DQX: aplica checks e separa válidos/quarentena; re-check após remedia
 
 from __future__ import annotations
 from pyspark.sql import DataFrame
-from onedata.silver.domain import DQXCfg
+from onedata.silver.domain.dqx import DQXCfg
 from onedata.silver.dqx.driver import apply_checks_split
 
 def initial_split(df_bronze: DataFrame, dqx: DQXCfg) -> tuple[DataFrame, DataFrame]:
