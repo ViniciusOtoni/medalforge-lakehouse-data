@@ -62,7 +62,6 @@ class BronzeOrchestrator:
         tokens = {m.strip().lower() for m in mode.replace(",", "+").split("+") if m.strip()}
         do_validate = "validate" in tokens or not tokens
         do_plan = "plan" in tokens or not tokens
-        do_ingest = "indigest" in tokens  # typo proposital? não — corrigir:
         do_ingest = "ingest" in tokens
         return do_validate, do_plan, do_ingest
 

@@ -1,8 +1,7 @@
-from bronze.managers import table_manager as tm_mod
+import bronze.orchestrator as orch_mod
 from bronze.ingestors.factory import IngestorFactory
 from bronze.models import BaseLocations, RunnerConfig
 from bronze.orchestrator import BronzeOrchestrator
-
 
 class _FakeIngestor:
     def __init__(self, **kwargs):
@@ -12,13 +11,11 @@ class _FakeIngestor:
         _FakeIngestor._ingest_called = True
         _FakeIngestor._ingest_include_existing = include_existing_files
 
-
 def test_orchestrator_ingest_calls_factory(monkeypatch, spark, contract_json_csv):
-    # Evita DDL real (Unity Catalog)
-    monkeypatch.setattr(tm_mod.TableManager, "ensure_external_table", lambda *a, **k: None)
-    monkeypatch.setattr(tm_mod.TableManager, "ensure_schema", lambda *a, **k: None)
+    # Patch no símbolo realmente usado pelo orquestrador
+    monkeypatch.setattr(orch_mod.TableManager, "ensure_external_table", lambda *a, **k: None)
+    monkeypatch.setattr(orch_mod.TableManager, "ensure_schema", lambda *a, **k: None)
 
-    # Substitui ingestor real por fake
     monkeypatch.setitem(IngestorFactory._FORMAT_REGISTRY, "csv", _FakeIngestor)
 
     base = BaseLocations(
