@@ -133,7 +133,20 @@ class TableManager:
                 base += f" COMMENT '{self._esc(text=col_comments[field.name])}'"
             ddl_parts.append(base)
 
-       
+        # colunas de auditoria (caso não tenham sido especificadas)
+        if "ingestion_ts" not in names:
+            cmt = col_comments.get("ingestion_ts")
+            base = f"{self._q(name='ingestion_ts')} TIMESTAMP"
+            if cmt:
+                base += f" COMMENT '{self._esc(text=cmt)}'"
+            ddl_parts.append(base)
+
+        if "ingestion_date" not in names:
+            cmt = col_comments.get("ingestion_date")
+            base = f"{self._q(name='ingestion_date')} DATE"
+            if cmt:
+                base += f" COMMENT '{self._esc(text=cmt)}'"
+            ddl_parts.append(base)
 
         return ",\n  ".join(ddl_parts)
 
