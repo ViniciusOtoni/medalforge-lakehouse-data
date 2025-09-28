@@ -12,8 +12,8 @@ from typing import Any, Dict
 
 from pyspark.sql import SparkSession
 
-from bronze.models import RunnerConfig, BaseLocations
-from bronze.orchestrator import BronzeOrchestrator
+from models import RunnerConfig, BaseLocations
+from orchestrator import BronzeOrchestrator
 
 sys.path.append(os.getcwd())
 

@@ -31,6 +31,7 @@ def test_factory_create_builds_instance(spark):
         checkpoint_location="/cp",
     )
     # Deve ser CSVIngestor
+ 
     assert isinstance(inst, CSVIngestor)
     assert inst.target_table == "bronze.sales.orders"
 
