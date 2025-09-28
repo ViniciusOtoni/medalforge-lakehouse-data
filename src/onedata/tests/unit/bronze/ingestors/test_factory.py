@@ -1,7 +1,7 @@
 import pytest
 from pyspark.sql.types import StructType, StructField, StringType
-from bronze.ingestors.factory import IngestorFactory
-from bronze.ingestors.ingestors import CSVIngestor, JSONIngestor, DelimitedTextIngestor
+from onedata.bronze.ingestors.factory import IngestorFactory
+from onedata.bronze.ingestors.ingestors import CSVIngestor, JSONIngestor, DelimitedTextIngestor
 
 
 def test_factory_registry_defaults():

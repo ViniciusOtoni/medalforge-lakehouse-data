@@ -1,4 +1,4 @@
-from bronze.models import RunnerConfig, BaseLocations, Paths, IngestionPlan
+from onedata.bronze.models import RunnerConfig, BaseLocations, Paths, IngestionPlan
 
 
 def test_runner_config_defaults():

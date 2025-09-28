@@ -9,26 +9,35 @@ description = "Pipelines Bronze/Silver com monitoramento e DQX"
 readme = "README.md"
 requires-python = ">=3.10"
 
-# Dependências comuns a TODO o projeto (sempre instaladas com o wheel)
+# Dependências instaladas sempre que o wheel for instalado no cluster
 dependencies = [
-    "pyspark>=3.5,<3.6",
-    "delta-spark>=3,<4",
-    "pydantic>=2,<3",
-    "azure-identity>=1.16.0",
-    "azure-data-tables>=12.5.0",
+  # Spark/Delta
+  "pyspark[connect]>=3.5,<3.6",
+  "delta-spark>=3,<4",
+
+  # Tipagem/validação
+  "pydantic>=2,<3",
+
+  # Azure (monitoria)
+  "azure-identity>=1.15",         
+  "azure-data-tables>=12.5.0",
+
+  # gRPC stack (usado por pyspark connect e afins)
+  "protobuf>=4.25,<5",
+  "googleapis-common-protos",
+  "grpcio",
 ]
 
-# Extras (instalados só quando necessário)
 [project.optional-dependencies]
-# Dependências adicionais para testes (se você tem pytest, coverage etc.)
+# Ferramentas de desenvolvimento/testes
 dev = [
-    "pytest>=7,<8",
-    "pytest-cov>=4,<5",
+  "pytest>=7,<8",
+  "pytest-cov>=4,<5",
 ]
 
-# Dependências específicas da Silver (DQX e outras libs de transformação)
+# Dependências específicas da Silver
 silver = [
-    "databricks-labs-dqx==0.8.0",
+  "databricks-labs-dqx==0.8.0",
 ]
 
 [tool.setuptools]
@@ -38,7 +47,6 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["onedata*"]
 
-# Ponto de entrada CLI (facilita executar localmente ou no Databricks)
 [project.scripts]
 bronze_main = "onedata.bronze.main:main"
 silver_main = "onedata.silver.main:main"

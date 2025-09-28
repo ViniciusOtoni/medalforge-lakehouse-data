@@ -60,8 +60,7 @@ targets:
                   - --contract_path
                   - ${workspace.file_path}/contracts/silver/dummy.yaml
               job_cluster_key: small_job_cluster
-              pip_install_extras:
-                - silver
+              pip_install_extras: ["silver"]
           job_clusters:
             - job_cluster_key: small_job_cluster
               new_cluster:

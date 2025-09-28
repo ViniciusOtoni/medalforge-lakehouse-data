@@ -54,22 +54,17 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-      
-      - name: Set PYTHONPATH (repo root + bronze + silver)
-        run: |
-          echo "PYTHONPATH=${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}/bronze:${GITHUB_WORKSPACE}/silver:${PYTHONPATH}" >> $GITHUB_ENV
+          pip install -e .[dev] || pip install -e .
+
 
       # Executa testes
       - name: Run tests (unit + integration)
         run: |
           set -euo pipefail
-          pytest -q \
-            --cov=./src --cov-report=term-missing \
+          python -m pytest -q \
+            --cov=src/onedata --cov-report=term-missing \
             tests/unit tests/integration
+
 
   deploy_and_run:
     needs: tests

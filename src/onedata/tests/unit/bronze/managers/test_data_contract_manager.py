@@ -3,7 +3,7 @@ DataContractManager: validações e helpers (sem tocar Delta/UC).
 """
 
 import pytest
-from bronze.managers.data_contract_manager import DataContractManager
+from onedata.bronze.managers.data_contract_manager import DataContractManager
 
 
 def _mk_contract(fmt="csv", options=None):

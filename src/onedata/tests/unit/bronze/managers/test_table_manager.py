@@ -1,4 +1,4 @@
-from bronze.managers.table_manager import TableManager
+from onedata.bronze.managers.table_manager import TableManager
 from pyspark.sql.types import StructType, StructField, StringType
 
 

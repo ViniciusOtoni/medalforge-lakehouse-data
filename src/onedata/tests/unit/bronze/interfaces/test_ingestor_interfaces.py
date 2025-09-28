@@ -1,5 +1,5 @@
 from pyspark.sql.types import StructType, StructField, StringType
-from bronze.interfaces.ingestor_interfaces import StructuredDataIngestor
+from onedata.bronze.interfaces.ingestor_interfaces import StructuredDataIngestor
 
 
 class _CSVIngestorForTest(StructuredDataIngestor):

@@ -1,7 +1,7 @@
 import os
 import types
 
-from monitoring.azure_table_runs import PipelineRunLogger
+from onedata.monitoring.azure_table_runs import PipelineRunLogger
 
 
 def test_noop_when_env_missing(monkeypatch):
