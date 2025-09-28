@@ -72,6 +72,5 @@ def ensure_catalog_schema(catalog: str, schema: str) -> None:
         if "permission" in msg or "not authorized" in msg:
             raise RuntimeError(
                 f"Sem permissão para criar o schema '{catalog}.{schema}'. "
-                f"Crie-o previamente e conceda USAGE/CREATE ao SPN do job."
             ) from e
         raise

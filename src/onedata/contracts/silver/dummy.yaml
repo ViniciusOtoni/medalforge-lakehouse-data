@@ -102,19 +102,20 @@ quarantine:
         columns: ["id"]
 
   sink:
-    table: "silver.quarantine.sales_bronze_data"
+    table: "monitoring.quarantine.sales_bronze_data"
 
 customs:
   allow: true
   registry:
-    - name: my_custom_discount
-      module: "customs.sales_rules"
-      method: "apply_discount_if_high_value"
+    - name: discount_rule
+      module: onedata.silver.customs.custom_sales_rules
+      method: apply_discount_if_high_value
       args_schema:
-        percent:   { type: number, min: 0, max: 50, coerce: true, required: true }
-        threshold: { type: number, min: 0, default: 1000, coerce: true, required: false }
+        percent: { type: number, required: true, min: 0, max: 50 }
+        threshold: { type: number, required: true, min: 0 }
   use_in:
-    - stage: "standard"
-      method: "my_custom_discount"
+    - stage: standard
+      method: discount_rule
       args:
-        percent: "5"   # string -> será convertido p/ número (coerce); threshold usa default=1000
+        percent: 10
+        threshold: 1000

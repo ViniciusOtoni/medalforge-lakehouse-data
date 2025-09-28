@@ -44,7 +44,7 @@ def _collect_checks(dqx_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
     for section in ("checks", "custom"):
         items = dqx_cfg.get(section, []) or []
         for item in items:
-            # sanity-check para mensagens de erro mais claras
+            # mensagem de erro mais clara para DEBUGGING
             if "check" not in item or "function" not in item["check"]:
                 raise ValueError(f"Item DQX inválido (esperado 'check.function'): {item}")
             checks.append(item)
@@ -82,6 +82,5 @@ def apply_checks_split(df: DataFrame, dqx_cfg: Dict[str, Any]) -> Tuple[DataFram
     checks = _collect_checks(dqx_cfg=dqx_cfg)
 
     # Executa checks e separa registros válidos vs. quarentenados
-    # (mantém posicionais por compatibilidade com a API do DQX)
     valid_df, quarantine_df = engine.apply_checks_by_metadata_and_split(df, checks, globals())
     return valid_df, quarantine_df
