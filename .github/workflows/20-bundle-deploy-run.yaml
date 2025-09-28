@@ -61,9 +61,7 @@ jobs:
       - name: Run tests (unit + integration)
         run: |
           set -euo pipefail
-          python -m pytest -q \
-            --cov=src/onedata --cov-report=term-missing \
-            tests/unit tests/integration
+          python -m pytest -q --cov=src/onedata --cov-report=term-missing
 
 
   deploy_and_run:
