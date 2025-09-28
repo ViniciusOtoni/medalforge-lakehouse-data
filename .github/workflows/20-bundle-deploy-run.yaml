@@ -68,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           pytest -q \
-            --cov=./src/onedata --cov-report=term-missing \
+            --cov=./src --cov-report=term-missing \
             tests/unit tests/integration
 
   deploy_and_run:
