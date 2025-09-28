@@ -6,7 +6,7 @@ e customizam apenas defaults/validações via hooks.
 
 from __future__ import annotations
 from typing import Any, Dict
-from interfaces.ingestor_interfaces import (
+from bronze.interfaces.ingestor_interfaces import (
     StructuredDataIngestor,
     SemiStructuredDataIngestor,
 )

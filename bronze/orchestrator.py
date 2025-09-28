@@ -9,10 +9,10 @@ from typing import Any, Dict, Tuple
 
 from pyspark.sql import SparkSession
 
-from models import RunnerConfig, BaseLocations, Paths, IngestionPlan
-from managers.data_contract_manager import DataContractManager
-from managers.table_manager import TableManager
-from ingestors.factory import IngestorFactory
+from bronze.models import RunnerConfig, BaseLocations, Paths, IngestionPlan
+from bronze.managers.data_contract_manager import DataContractManager
+from bronze.managers.table_manager import TableManager
+from bronze.ingestors.factory import IngestorFactory
 from monitoring.azure_table_runs import PipelineRunLogger
 
 

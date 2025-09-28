@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Type
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 
-from ingestors.ingestors import CSVIngestor, JSONIngestor, DelimitedTextIngestor
+from bronze.ingestors.ingestors import CSVIngestor, JSONIngestor, DelimitedTextIngestor
 
 
 class IngestorFactory:
