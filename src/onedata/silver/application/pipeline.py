@@ -4,7 +4,7 @@ Orquestrador do Pipeline Silver (contrato → estágios DQX/ETL/WRITE).
 
 from __future__ import annotations
 from pyspark.sql import SparkSession, DataFrame
-from onedata.silver.domain import SilverYaml
+from onedata.silver.domain.silver import SilverYaml
 from onedata.monitoring.azure_table_runs import PipelineRunLogger
 from onedata.silver.application.settings import SETTINGS
 from onedata.silver.stages import dqx_stage, etl_stage, write_stage
