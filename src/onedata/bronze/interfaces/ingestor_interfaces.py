@@ -297,8 +297,7 @@ class StructuredDataIngestor(DataIngestor, ABC):
             "quote": '"',
             "escape": '"',
             "nullValue": "",
-            "badRecordsPath": f"{self.checkpoint_location}/bad_records",
-            "rescuedDataColumn": "_rescued",
+            "badRecordsPath": f"{self.checkpoint_location}/bad_records"
         }
 
     def validate_reader_options(self, opts: Dict[str, Any]) -> None:
@@ -329,8 +328,7 @@ class SemiStructuredDataIngestor(DataIngestor, ABC):
         """
         return {
             "multiline": "false",
-            "badRecordsPath": f"{self.checkpoint_location}/bad_records",
-            "rescuedDataColumn": "_rescued",
+            "badRecordsPath": f"{self.checkpoint_location}/bad_records"
         }
 
     def validate_reader_options(self, opts: Dict[str, Any]) -> None:
@@ -361,6 +359,5 @@ class UnstructuredDataIngestor(DataIngestor, ABC):
         """
         return {
             "wholetext": "false",
-            "badRecordsPath": f"{self.checkpoint_location}/bad_records",
-            "rescuedDataColumn": "_rescued",
+            "badRecordsPath": f"{self.checkpoint_location}/bad_records"
         }
