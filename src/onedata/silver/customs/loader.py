@@ -10,7 +10,6 @@ def load_custom(
     module: str,
     method: str,
     *,
-    dev_reload: bool = False,
     allow_module_prefixes: Optional[Iterable[str]] = None,
     require_marked_decorator: bool = False,
 ) -> Callable[..., DataFrame]:
@@ -25,8 +24,6 @@ def load_custom(
 
     try:
         mod = importlib.import_module(module)
-        if dev_reload and module in sys.modules:
-            mod = importlib.reload(mod)
     except Exception as e:
         raise ImportError(f"Falha ao importar módulo '{module}': {e}") from e
 

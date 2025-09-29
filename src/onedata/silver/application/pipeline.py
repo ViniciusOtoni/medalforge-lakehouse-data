@@ -13,8 +13,8 @@ def run_pipeline(spark: SparkSession, cfg: SilverYaml) -> None:
     """
     Executa o pipeline Silver dado um contrato validado (SilverYaml).
     """
-    env_is_dev = SETTINGS.env == "dev"
-    logger = (print if env_is_dev else None)
+ 
+    logger = (print if SETTINGS.env == "dev" else None)
 
     with PipelineRunLogger(
         env=SETTINGS.env,
@@ -57,16 +57,12 @@ def run_pipeline(spark: SparkSession, cfg: SilverYaml) -> None:
 
         valid_df = etl_stage.run_customs_standard(
             valid_df, cfg.customs,
-            env_is_dev=env_is_dev,
-            allow_extra_args=not SETTINGS.customs_strict,
             allow_module_prefixes=SETTINGS.customs_prefixes,
             require_marked_decorator=SETTINGS.customs_strict,
             logger=logger,
         )
         fixed_valid_df = etl_stage.run_customs_standard(
             fixed_valid_df, cfg.customs,
-            env_is_dev=env_is_dev,
-            allow_extra_args=not SETTINGS.customs_strict,
             allow_module_prefixes=SETTINGS.customs_prefixes,
             require_marked_decorator=SETTINGS.customs_strict,
             logger=logger,

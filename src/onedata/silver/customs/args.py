@@ -62,9 +62,7 @@ def _validate_regex(val: Any, rule: Dict[str, Any], key: str) -> None:
 
 def validate_and_normalize_args(
     args: Dict[str, Any],
-    schema: Dict[str, Any],
-    *,
-    allow_extra_args: bool = True,
+    schema: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Valida e normaliza args conforme schema simples.
@@ -120,12 +118,9 @@ def validate_and_normalize_args(
 
         out[key] = val
 
-    if allow_extra_args:
-        for key, value in args.items():
-            if key not in out and (schema is None or key not in schema):
-                out[key] = value
-    else:
-        extras = [key for key in args.keys() if key not in (schema or {})]
-        if extras: raise ValueError(f"args não permitidos: {extras}")
+    # Rejeita qualquer argumento fora do schema
+    extras = [k for k in args.keys() if k not in (schema or {})]
+    if extras:
+        raise ValueError(f"args não permitidos: {extras}")
 
     return out

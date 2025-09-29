@@ -10,8 +10,6 @@ def apply_customs_stage(
     customs_cfg: CustomsCfg,
     stage_name: str,
     *,
-    dev_reload: bool = False,
-    allow_extra_args: bool = True,
     logger: Optional[Callable[[str], None]] = None,
     allow_module_prefixes: Optional[Iterable[str]] = "custom_",
     require_marked_decorator: bool = True,
@@ -41,13 +39,12 @@ def apply_customs_stage(
             raise ValueError(f"Custom '{step.method}' não registrado (conhecidos=[{known}])")
 
         try:
-            norm = validate_and_normalize_args(step.args or {}, decl.args_schema or {}, allow_extra_args=allow_extra_args)
+            norm = validate_and_normalize_args(step.args or {}, decl.args_schema or {})
         except Exception as e:
             raise type(e)(f"Args inválidos em '{decl.name}' ({decl.module}.{decl.method}): {e}")
 
         fn = load_custom(
             decl.module, decl.method,
-            dev_reload=dev_reload,
             allow_module_prefixes=allow_module_prefixes,
             require_marked_decorator=require_marked_decorator,
         )
