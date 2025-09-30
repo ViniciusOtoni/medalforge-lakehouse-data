@@ -66,7 +66,7 @@ def test_run_pipeline_feliz_com_sink(monkeypatch, spark):
             return bronze_df
 
     # substitui apenas o método .table do spark real
-    monkeypatch.setattr(spark, "table", FakeSpark.table, raising=True)
+    monkeypatch.setattr(spark, "table", lambda name: bronze_df, raising=True)
 
     # ---- Stubs de stages ----
     import onedata.silver.application.pipeline as mod
@@ -182,7 +182,7 @@ def test_run_pipeline_sem_sink_cria_rejected_no_schema_quarantine(monkeypatch, s
       <target.catalog>.<target.schema_name>_quarantine.<target.table>_rejected
     """
     bronze_df = _bronze_df(spark)
-    monkeypatch.setattr(spark, "table", lambda self, n: bronze_df, raising=False)
+    monkeypatch.setattr(spark, "table", lambda n: bronze_df, raising=False)
 
     import onedata.silver.application.pipeline as mod
 

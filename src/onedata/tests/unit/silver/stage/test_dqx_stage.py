@@ -11,16 +11,15 @@ from onedata.silver.stages.dqx_stage import initial_split, recheck_after_remedia
 from onedata.silver.domain.dqx import DQXCfg
 
 
-def test_initial_split_passthrough(monkeypatch, spark):
-    """Comportamento atual: split retorna DF de entrada como 'válidos' e um DF vazio para quarentena."""
+def test_initial_split_passthrough(spark):
+    """Comportamento atual: split retorna DF de entrada como 'válidos' e quarentena vazia."""
     df = spark.createDataFrame([Row(id="A"), Row(id=None)], T.StructType([T.StructField("id", T.StringType(), True)]))
 
     dqx = DQXCfg()  # defaults
     valid_df, quarantine_df = initial_split(df, dqx)
 
-    # No código atual, não há driver — assumimos passthrough dos válidos
-    assert valid_df.count() == df.where("id IS NOT NULL").count()
-    assert quarantine_df.count() in (0, df.where("id IS NULL").count())
+    assert valid_df.count() == df.count()
+    assert quarantine_df.count() in (0, )
 
 
 def test_recheck_after_remediation_passthrough(spark):
