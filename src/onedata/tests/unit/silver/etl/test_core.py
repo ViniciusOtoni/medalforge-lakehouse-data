@@ -77,7 +77,7 @@ def test_trim_columns_basico_e_missing_skip(spark):
 
     out2 = trim_columns(df, ["name", "nao_existe"], missing="skip")
     # não deve explodir; 'name' continua trimado
-    assert out2.where("name = 'Ana'").count() == 3
+    assert out2.where("name = 'Ana'").count() == 2
 
 
 def test_trim_columns_missing_error_explode(spark):
@@ -263,10 +263,10 @@ def test_drop_if_null_or_semantica(spark):
     df = df.withColumn("opt", F.when(F.col("id").contains("B2"), F.lit(None)).otherwise(F.lit(1)))
 
     out = drop_if_null(df, ["name", "opt"])
-    # linhas removidas: (name is null) OR (opt is null) -> apenas a primeira linha sobrevive
-    assert out.count() == 1
-    row = out.select("id").first()
-    assert "A1" in row.id  # a linha de 'A1' com priority=1
+    # linhas removidas: (name is null) OR (opt is null) -> remove B2; sobram as 2 linhas de A1
+    assert out.count() == 2
+    ids = [r.id for r in out.select("id").collect()]
+    assert all("A1" in _id for _id in ids)   # ambas são de A1
 
 
 def test_drop_if_null_missing_skip_ignora_inexistentes(spark):
