@@ -7,7 +7,7 @@ Finalidade: garantir que as funções do estágio DQX
 """
 
 from pyspark.sql import Row, types as T
-from onedata.silver.stage.dqx_stage import initial_split, recheck_after_remediation
+from onedata.silver.stages.dqx_stage import initial_split, recheck_after_remediation
 from onedata.silver.domain.dqx import DQXCfg
 
 

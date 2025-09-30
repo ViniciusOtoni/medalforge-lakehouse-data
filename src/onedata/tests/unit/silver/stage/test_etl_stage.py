@@ -8,7 +8,7 @@ Finalidade: validar o estágio ETL (strip de colunas DQX, steps core e customs):
 
 import pytest
 from pyspark.sql import Row, functions as F, types as T
-from onedata.silver.stage.etl_stage import strip_dqx_cols, run_core_steps, run_customs_standard
+from onedata.silver.stages.etl_stage import strip_dqx_cols, run_core_steps, run_customs_standard
 from onedata.silver.domain.etl import Step, CustomsCfg, CustomDecl
 
 
