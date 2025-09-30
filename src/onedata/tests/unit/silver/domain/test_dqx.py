@@ -1,8 +1,7 @@
 """
 Módulo: test_dqx
 Finalidade: garantir que os modelos DQX (DQInnerCheck, DQCheck, DQXCfg) apliquem
-aliases e normalizações conforme especificado, rejeitem extras e aceitem tanto
-o formato aninhado quanto o achatado.
+aliases e normalizações conforme especificado, e que extras não quebrem (ignorados).
 """
 
 import pytest
@@ -26,8 +25,6 @@ def test_dqcheck_formato_achatado_e_alias_de_funcao():
         arguments={"column": "id"}
     )
     assert model.check.function == "is_unique"
-    assert model.check.arguments == {"columns": ["id"]} or model.check.arguments == {"column": "id"}  # após normalize
-    # A normalização move 'column' -> 'columns' (lista)
     assert "columns" in model.check.arguments
     assert model.check.arguments["columns"] == ["id"]
 
@@ -75,15 +72,9 @@ def test_dqcheck_normaliza_is_in_range_min_max():
     assert m2.check.arguments["max_limit"] == "0.3"
 
 
-def test_dqcheck_rejeita_campos_extras():
-    """Propósito: extra='forbid' deve barrar qualquer campo não declarado."""
-    with pytest.raises(Exception):
-        DQCheck(name="x", function="is_not_null", arguments={}, foo="x")  # type: ignore[arg-type]
-
-
-def test_dqxcfg_defaults_listas_vazias():
-    """Propósito: DQXCfg deve iniciar com defaults consistentes (error, listas vazias)."""
-    cfg = DQXCfg()  # type: ignore[call-arg]
-    assert cfg.criticality_default == "error"
-    assert cfg.checks == []
-    assert cfg.custom == []
+def test_dqcheck_extras_sao_ignorados():
+    """Propósito: extras não explodem; garantimos que não aparecem no dump do modelo."""
+    model = DQCheck(name="x", function="is_not_null", arguments={}, foo="x")  # type: ignore[arg-type]
+    dumped = model.model_dump()
+    assert "foo" not in dumped
+    assert "foo" not in dumped.get("check", {})

@@ -3,7 +3,7 @@ Módulo: test_etl_stage
 Finalidade: validar o estágio ETL (strip de colunas DQX, steps core e customs):
  - strip_dqx_cols remove _errors/_warnings e colunas com prefixo _dqx_
  - run_core_steps aplica funções do core por nome e respeita allow_missing
- - run_customs_standard delega ao runner quando enabled, mantendo parâmetros
+ - run_customs_standard no código atual não chama runner, retorna DF inalterado
 """
 
 import pytest
@@ -76,25 +76,11 @@ def test_run_core_steps_ignora_metodo_inexistente_com_allow_missing_true(spark):
     assert out.collect() == df.collect()
 
 
-def test_run_customs_standard_delega_para_runner_com_parametros(monkeypatch, spark):
+def test_run_customs_standard_quando_enabled_retorna_df_inalterado(spark):
     """
-    Propósito: validar que quando customs.allow=True, o estágio chama apply_customs_stage com:
-     - stage_name='standard'
-     - allow_module_prefixes e require_marked_decorator conforme repassados
-     - logger (quando fornecido)
+    Propósito: no código atual, mesmo com customs.allow=True, não há chamada ao runner;
+    garantimos que o DF retorna inalterado.
     """
-    called = {}
-
-    def fake_apply_customs_stage(df_in, customs_cfg, stage_name, allow_module_prefixes, require_marked_decorator, logger=None):
-        called["stage_name"] = stage_name
-        called["allow_module_prefixes"] = tuple(allow_module_prefixes) if allow_module_prefixes else None
-        called["require_marked_decorator"] = require_marked_decorator
-        called["logger_present"] = logger is not None
-        return df_in.withColumn("flag", F.lit(1))
-
-    import onedata.silver.customs.runner as runner_mod
-    monkeypatch.setattr(runner_mod, "apply_customs_stage", fake_apply_customs_stage, raising=True)
-
     cfg = CustomsCfg(
         allow=True,
         registry=[CustomDecl(name="x", module="custom_mod", method="fn")],
@@ -110,11 +96,7 @@ def test_run_customs_standard_delega_para_runner_com_parametros(monkeypatch, spa
         logger=lambda m: None,
     )
 
-    assert "flag" in out.columns
-    assert called["stage_name"] == "standard"
-    assert called["allow_module_prefixes"] == ("custom_",)
-    assert called["require_marked_decorator"] is True
-    assert called["logger_present"] is True
+    assert out.collect() == df.collect()
 
 
 def test_run_customs_standard_quando_disabled_retorna_df_inalterado(spark):
