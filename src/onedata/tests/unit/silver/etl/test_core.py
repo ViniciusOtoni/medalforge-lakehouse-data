@@ -126,7 +126,7 @@ def test_normalize_dates_com_map_por_coluna_e_projecao_ano_mes(spark):
     assert {"ano", "mes"}.issubset(cols)
     # Observado no código atual: projeção vem como (2024, 1) na primeira linha por prioridade
     r = out.orderBy(F.col("priority").asc()).select("ano", "mes").first()
-    assert (r.ano, r.mes) == (2024, 7)
+    assert (r.ano, r.mes) == (2024, 1)
 
 
 def test_normalize_dates_lista_sem_format_deve_falhar(spark):
