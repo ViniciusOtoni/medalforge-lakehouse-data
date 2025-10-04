@@ -1,5 +1,9 @@
 # One Data — Documentação Técnica
 
+<p align="center">
+  <img src="./assets/images/logo.png" alt="One Data" width="350" style="border-radius: 5%;"/>
+</p>
+
 O repositório "One Data" é um dos componentes da solução Data Master (F1rst Santander). Solução proposta e desenvolvida por [Vinicius Otoni](http://linkedin.com/in/vinicius-otoni-b330b3295/)
 
 > ⚠️ Antes de prosseguir, leia o repositório de infraestrutura **[Sunny Data](https://github.com/ViniciusOtoni/sunny-data)**. Todo o provisionamento (Azure + Terraform + GitHub Actions) utilizado aqui depende dele.
@@ -526,9 +530,7 @@ Será retornado o *PASSWORD*, *TENANT* e *APPID* após a criação. Esses valore
 - **ARM_CLIENT_ID** -> *APPID*
 - **ARM_SUBSCRIPTION_ID** -> *subscriptionID*
 
-<video width="40%" height="300px" controls>
-  <source src="./assets/videos/adicionar-secret.mp4" type="video/mp4">
-</video>
+![Cadastrar Secret](./assets/gifs/adicionar-secret.gif)
 
 - Recupere o *OBJECT_ID* para gravar na secret **ARM_OBJECT_ID**
 
@@ -558,15 +560,11 @@ az role assignment create \
 
 - Atribuir a SPN como Cloud Application Administrator
 
-<video width="40%" height="300px" controls>
-  <source src="./assets/videos/cloud-application.mp4" type="video/mp4">
-</video>
+![Cloud Application](./assets/gifs/cloud-application.gif)
 
 - Adicione essas duas roles no Microsoft Graph *Directory.ReadWrite.All* e *Group.ReadWrite.All*
 
-<video width="40%" height="300px" controls>
-  <source src="./assets/videos/MicrosoftGraph.mp4" type="video/mp4">
-</video>
+![Microsoft Graph](./assets/gifs/MicrosoftGraph.gif)
 
 ### 9.2 Atribuição da SPN dinâmica como Account Admin
 
@@ -575,34 +573,24 @@ az role assignment create \
 - Entre no console de account do Databricks (https://accounts.azuredatabricks.net/)
     Para logar, informe o seu e-mail **UPN** recuperado no Microsoft Entra ID
 
-<video width="40%" height="300px" controls>
-  <source src="./assets/videos/UPN.mp4" type="video/mp4">
-</video>
+![UPN User](./assets/gifs/UPN.gif)
 
 - Atribua a SPN dinâmica como Account Admin
 
-<video width="40%" height="300px" controls>
-  <source src="./assets/videos/accountAdmin.mp4" type="video/mp4">
-</video>
-
+![Account Admin](./assets/gifs/accountAdmin.gif)
 
 - Delete o metastore criado por Default
 
-<video width="40%" height="300px" controls>
-  <source src="./assets/videos/metastore.mp4" type="video/mp4">
-</video>
+![Metastore](./assets/gifs/metastore.gif)
 
 - Recupere o valor do Account ID e grave na secret do GitHub **ARM_ACCOUNT_ID**
 
-<video width="40%" height="300px" controls>
-  <source src="./assets/videos/accountID.mp4" type="video/mp4">
-</video>
+![Account ID](./assets/gifs/accountID.gif)
 
 - Aprovar JOB para finalização do Workflow
 
-<video width="40%" height="300px" controls>
-  <source src="./assets/videos/approvement.mp4" type="video/mp4">
-</video>
+![Approvement](./assets/gifs/approvement.gif)
+
 
 ### 9.3 Workflow de execução do One Data
 
