@@ -530,7 +530,7 @@ Será retornado o *PASSWORD*, *TENANT* e *APPID* após a criação. Esses valore
 - **ARM_CLIENT_ID** -> *APPID*
 - **ARM_SUBSCRIPTION_ID** -> *subscriptionID*
 
-![Cadastrar Secret](./assets/gifs/adicionar-secret.gif)
+<img src="./assets/gifs/adicionar-secret.gif" width="600px" heigth="auto"/>
 
 - Recupere o *OBJECT_ID* para gravar na secret **ARM_OBJECT_ID**
 
@@ -560,11 +560,11 @@ az role assignment create \
 
 - Atribuir a SPN como Cloud Application Administrator
 
-![Cloud Application](./assets/gifs/cloud-application.gif)
+<img src="./assets/gifs/cloud-application.gif" width="600px" heigth="auto"/>
 
 - Adicione essas duas roles no Microsoft Graph *Directory.ReadWrite.All* e *Group.ReadWrite.All*
 
-![Microsoft Graph](./assets/gifs/MicrosoftGraph.gif)
+<img src="./assets/gifs/MicrosoftGraph.gif" width="600px" heigth="auto"/>
 
 ### 9.2 Atribuição da SPN dinâmica como Account Admin
 
@@ -573,23 +573,23 @@ az role assignment create \
 - Entre no console de account do Databricks (https://accounts.azuredatabricks.net/)
     Para logar, informe o seu e-mail **UPN** recuperado no Microsoft Entra ID
 
-![UPN User](./assets/gifs/UPN.gif)
+<img src="./assets/gifs/UPN.gif" width="600px" heigth="auto"/>
 
 - Atribua a SPN dinâmica como Account Admin
 
-![Account Admin](./assets/gifs/accountAdmin.gif)
+<img src="./assets/gifs/accountAdmin.gif" width="600px" heigth="auto"/>
 
 - Delete o metastore criado por Default
 
-![Metastore](./assets/gifs/metastore.gif)
+<img src="./assets/gifs/metastore.gif" width="600px" heigth="auto"/>
 
 - Recupere o valor do Account ID e grave na secret do GitHub **ARM_ACCOUNT_ID**
 
-![Account ID](./assets/gifs/accountID.gif)
+<img src="./assets/gifs/accountID.gif" width="600px" heigth="auto"/>
 
 - Aprovar JOB para finalização do Workflow
 
-![Approvement](./assets/gifs/approvement.gif)
+<img src="./assets/gifs/approvement.gif" width="600px" heigth="auto"/>
 
 
 ### 9.3 Workflow de execução do One Data
